@@ -38,6 +38,7 @@ DEFAULT_WORKERS = 150
 OUTSTANDING_FACTOR = 2
 MAX_QUEUE = 20000
 OUTPUT_FILENAME = "Minecraft_Servers.txt"
+OPEN_PORTS_FILENAME = "Minecraft_Open_Ports.txt"
 SAVED_SERVERS_FILE = "saved_servers.json"
 
 PROTOCOL_CANDIDATES = [768, 767, 766, 765, 764, 763, 760, 759, 758, 757, 756, 755, 754, 498, 340, 316, 210, 110, 47]
@@ -93,6 +94,7 @@ def get_desktop_path():
 
 DESKTOP_DIR = get_desktop_path()
 OUT_PATH = os.path.join(DESKTOP_DIR, OUTPUT_FILENAME)
+OPEN_PORTS_PATH = os.path.join(DESKTOP_DIR, OPEN_PORTS_FILENAME)
 SAVED_PATH = os.path.join(DESKTOP_DIR, SAVED_SERVERS_FILE)
 
 def safe_write_line(path, line):
@@ -500,6 +502,7 @@ class ScannerAppGUI:
         self._ping_sum = 0.0
         self._ping_count = 0
         self._servers_saved = set()
+        self._open_ports_saved = set()
         self.servers = []
         self.maybe_list = []
         self.open_ports = set()
@@ -562,6 +565,7 @@ class ScannerAppGUI:
         self.autotune  = None
 
         self._prepare_outfile()
+        self._bootstrap_open_port_cache()
         self._build_ui()
         self._load_saved_servers()
         self._start_refresh_loop()
@@ -688,11 +692,18 @@ class ScannerAppGUI:
 
 # ============================== SECTION 5: PERSISTENCE / LOGS / HELPERS (START) ===============================
     def _prepare_outfile(self):
-        first = not os.path.exists(OUT_PATH)
+        first_servers = not os.path.exists(OUT_PATH)
+        first_ports = not os.path.exists(OPEN_PORTS_PATH)
         try:
             with open(OUT_PATH, "a", encoding="utf-8") as f:
-                if first:
+                if first_servers:
                     f.write("# Columns: ISO8601\tAddress\tVersion\tPlayers\tConfidence\tMOTD\n\n")
+        except Exception:
+            pass
+        try:
+            with open(OPEN_PORTS_PATH, "a", encoding="utf-8") as f:
+                if first_ports:
+                    f.write("# Columns: ISO8601\tEndpoint\n\n")
         except Exception:
             pass
 
@@ -708,6 +719,29 @@ class ScannerAppGUI:
             return
         safe_write_line(OUT_PATH, f"{datetime.now().isoformat(timespec='seconds')}\t{addr}\t{version}\t{players}\t{confidence}\t{motd}\n")
         self._servers_saved.add(key)
+
+    def _append_open_port_to_file(self, addr):
+        if addr in self._open_ports_saved:
+            return
+        safe_write_line(OPEN_PORTS_PATH, f"{datetime.now().isoformat(timespec='seconds')}\t{addr}\n")
+        self._open_ports_saved.add(addr)
+
+    def _bootstrap_open_port_cache(self):
+        try:
+            if not os.path.exists(OPEN_PORTS_PATH):
+                return
+            with open(OPEN_PORTS_PATH, "r", encoding="utf-8") as f:
+                for line in f:
+                    if not line or line.startswith("#"):
+                        continue
+                    parts = line.strip().split("\t")
+                    if not parts:
+                        continue
+                    endpoint = parts[-1].strip()
+                    if endpoint:
+                        self._open_ports_saved.add(endpoint)
+        except Exception:
+            pass
 
     def _ctl(self, text):
         self.ctl.config(state="normal")
@@ -1015,7 +1049,7 @@ class ScannerAppGUI:
     def _extra_fallback_probe(self, ip, timeout, handshake_host=None):
         nmap_ok = False; nmap_info = None
         try:
-            okn, info_n = self._nmap_probe(ip, DEFAULT_PORT, timeout)
+            okn, info_n = _nmap_probe(ip, DEFAULT_PORT, timeout)
             if okn:
                 nmap_ok = True
                 nmap_info = {"version": (info_n.get("product") or "-"), "players": None, "max": None, "motd": info_n.get("banner") or "", "hint": None}
