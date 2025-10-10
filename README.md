@@ -69,17 +69,32 @@ historical context and quick one-off modifications.
     [`mullvad-python`](https://pypi.org/project/mullvad-python/) – enhance VPN
     state tracking for Mullvad users.
 
-Install the core and optional dependencies with `pip`:
+Install the recommended dependencies with the bundled `requirements.txt` file:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
 pip install --upgrade pip
-pip install mcstatus python-nmap psutil mullvad-api mullvad-python
+pip install -r requirements.txt
 ```
 
 > The scanner gracefully degrades when optional packages are unavailable, so you
-> can install only the libraries you need.
+> can install only the libraries you need. Feel free to edit
+> `requirements.txt` to match the features you plan to use.
+
+### Manual installation
+
+If you prefer to install packages selectively, the key optional helpers are:
+
+- [`mcstatus`](https://pypi.org/project/mcstatus/) – richer Java status
+  queries.
+- [`python-nmap`](https://pypi.org/project/python-nmap/) – additional port
+  probing via Nmap.
+- [`psutil`](https://pypi.org/project/psutil/) – display system resource
+  usage in the UI.
+- [`mullvad-api`](https://pypi.org/project/mullvad-api/) and
+  [`mullvad-python`](https://pypi.org/project/mullvad-python/) – enhance VPN
+  state tracking for Mullvad users.
 
 ## Running the Scanner
 
