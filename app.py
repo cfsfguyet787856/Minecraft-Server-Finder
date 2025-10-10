@@ -730,14 +730,54 @@ class ScannerAppGUI:
         container = ttk.Frame(self.root, padding=(8, 8, 8, 12))
         container.pack(fill="both", expand=True)
         container.columnconfigure(0, weight=1)
+        container.rowconfigure(0, weight=1)
+        container.rowconfigure(1, weight=0)
+
+        notebook = ttk.Notebook(container)
+        notebook.grid(row=0, column=0, sticky="nsew")
+        self.notebook = notebook
+
+        scan_tab = ttk.Frame(notebook, padding=(8, 8, 8, 10))
+        network_tab = ttk.Frame(notebook, padding=(8, 8, 8, 10))
+        results_tab = ttk.Frame(notebook, padding=(8, 8, 8, 10))
+        for tab in (scan_tab, network_tab, results_tab):
+            tab.columnconfigure(0, weight=1)
+        notebook.add(scan_tab, text="Scan")
+        notebook.add(network_tab, text="Network")
+        notebook.add(results_tab, text="Results")
+
+        scan_body = ttk.Frame(scan_tab)
+        scan_body.pack(fill="both", expand=True)
+        scan_body.columnconfigure(0, weight=1)
 
         self._threads_display = tk.StringVar(value=f"{self.current_concurrency} (active 0)")
 
-        settings_section, settings = self._create_collapsible_section(container, "Scan Settings")
-        settings_section.pack(fill="x", padx=4, pady=(0, 6))
+        controls = ttk.Frame(scan_body)
+        controls.pack(fill="x", padx=4, pady=(0, 8))
+        self.btn_start = ttk.Button(controls, text="Start", width=10, command=self.start_scan, style=self._primary_button_style)
+        self.btn_pause = ttk.Button(controls, text="Pause", width=10, command=self.pause_scan, state="disabled")
+        self.btn_resume = ttk.Button(controls, text="Resume", width=10, command=self.resume_scan, state="disabled")
+        self.btn_stop = ttk.Button(controls, text="Stop", width=10, command=self.stop_scan, state="disabled")
+        self.btn_start.pack(side="left")
+        self.btn_pause.pack(side="left", padx=(6, 0))
+        self.btn_resume.pack(side="left", padx=(6, 0))
+        self.btn_stop.pack(side="left", padx=(6, 0))
+        self.btn_open_folder = ttk.Button(controls, text="Open Output Folder", width=18, command=self.open_output_folder)
+        self.btn_change_save = ttk.Button(controls, text="Change Save Folder", width=18, command=self.change_save_directory)
+        self.btn_clear_logs = ttk.Button(controls, text="Clear Logs", width=12, command=self.clear_logs)
+        self.btn_open_folder.pack(side="right", padx=(0, 6))
+        self.btn_change_save.pack(side="right", padx=(0, 6))
+        self.btn_clear_logs.pack(side="right")
+
+        settings_grid = ttk.Frame(scan_body)
+        settings_grid.pack(fill="x", padx=4, pady=(0, 6))
+        settings_grid.columnconfigure(0, weight=1)
+        settings_grid.columnconfigure(1, weight=1)
+
+        settings_section, settings = self._create_collapsible_section(settings_grid, "Scan Settings")
+        settings_section.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
         for col in (1, 3, 5, 7):
             settings.columnconfigure(col, weight=1)
-
         ttk.Label(settings, text="Start IP").grid(row=0, column=0, sticky="w", padx=(8, 4), pady=4)
         ttk.Entry(settings, textvariable=self.var_start).grid(row=0, column=1, sticky="ew", padx=(0, 12), pady=4)
         ttk.Label(settings, text="End IP").grid(row=0, column=2, sticky="w", padx=(0, 4), pady=4)
@@ -746,7 +786,6 @@ class ScannerAppGUI:
         ttk.Entry(settings, textvariable=self.var_threads, width=8).grid(row=0, column=5, sticky="ew", padx=(0, 12), pady=4)
         ttk.Label(settings, text="Timeout (s)").grid(row=0, column=6, sticky="w", padx=(0, 4), pady=4)
         ttk.Entry(settings, textvariable=self.var_timeout, width=8).grid(row=0, column=7, sticky="ew", padx=(0, 12), pady=4)
-
         ttk.Label(settings, text="Fail% threshold").grid(row=1, column=0, sticky="w", padx=(8, 4), pady=4)
         ttk.Entry(settings, textvariable=self.var_failthr, width=8).grid(row=1, column=1, sticky="w", padx=(0, 12), pady=4)
         ttk.Label(settings, text="Base delay (ms)").grid(row=1, column=2, sticky="w", padx=(0, 4), pady=4)
@@ -754,11 +793,10 @@ class ScannerAppGUI:
         ttk.Label(settings, text="Max delay (ms)").grid(row=1, column=4, sticky="w", padx=(0, 4), pady=4)
         ttk.Entry(settings, textvariable=self.var_scan_delay_max, width=8).grid(row=1, column=5, sticky="w", padx=(0, 12), pady=4)
 
-        options_section, options = self._create_collapsible_section(container, "Scan Options")
-        options_section.pack(fill="x", padx=4, pady=(0, 6))
+        options_section, options = self._create_collapsible_section(settings_grid, "Scan Options")
+        options_section.grid(row=0, column=1, sticky="nsew", padx=(4, 0))
         for idx in range(4):
             options.columnconfigure(idx, weight=1)
-
         ttk.Checkbutton(options, text="Randomize IP order", variable=self.var_random).grid(row=0, column=0, sticky="w", padx=8, pady=2)
         ttk.Checkbutton(options, text="Require ping response", variable=self.var_require_ping).grid(row=0, column=1, sticky="w", padx=8, pady=2)
         ttk.Checkbutton(options, text="Auto thread limit", variable=self.var_auto_limit).grid(row=0, column=2, sticky="w", padx=8, pady=2)
@@ -767,34 +805,63 @@ class ScannerAppGUI:
             options,
             text="Adaptive scan delay",
             variable=self.var_adaptive_delay,
-            command=self._on_adaptive_delay_toggle
+            command=self._on_adaptive_delay_toggle,
         ).grid(row=1, column=0, sticky="w", padx=8, pady=2)
 
-        tools_section, tools = self._create_collapsible_section(container, "Verification & Tools")
+        tools_section, tools = self._create_collapsible_section(scan_body, "Verification & Tools")
         tools_section.pack(fill="x", padx=4, pady=(0, 6))
         tools.columnconfigure(1, weight=1)
         tools.columnconfigure(3, weight=1)
-
         svc_text = f"Services: mcstatus {'ON' if _mcstatus_available else 'OFF'} | nmap {'ON' if _nmap_available else 'OFF'}"
         ttk.Label(tools, text=svc_text, style=self._muted_label_style).grid(row=0, column=0, columnspan=4, sticky="w", padx=8, pady=(6, 4))
-
         ttk.Label(tools, text="Host override").grid(row=1, column=0, sticky="w", padx=(8, 4), pady=4)
         self.var_host_override = tk.StringVar(value="")
         self.var_host_override.trace_add("write", self._on_host_override_change)
         self._on_host_override_change()
         ttk.Entry(tools, textvariable=self.var_host_override).grid(row=1, column=1, sticky="ew", padx=(0, 12), pady=4)
-
         ttk.Label(tools, text="Direct test host").grid(row=1, column=2, sticky="w", padx=(0, 4), pady=4)
         self.var_test_host = tk.StringVar(value="")
         ttk.Entry(tools, textvariable=self.var_test_host).grid(row=1, column=3, sticky="ew", padx=(0, 12), pady=4)
         ttk.Button(tools, text="Run Test", command=self.run_direct_test).grid(row=1, column=4, sticky="w", padx=(0, 8), pady=4)
 
-        proxy_section, proxy_frame = self._create_collapsible_section(container, "Proxy Pool")
-        proxy_section.pack(fill="x", padx=4, pady=(0, 6))
+        quick_and_perf = ttk.Frame(scan_body)
+        quick_and_perf.pack(fill="x", padx=4, pady=(0, 6))
+        quick_and_perf.columnconfigure(0, weight=1)
+        quick_and_perf.columnconfigure(1, weight=1)
+
+        stats_section, stats = self._create_collapsible_section(quick_and_perf, "Quick Stats")
+        stats_section.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
+        stat_items = [
+            ("Replied", self.var_icmp, self._success_label_style),
+            ("Port open", self.var_port, self._warn_label_style),
+            ("Minecraft", self.var_mc, self._info_label_style),
+            ("Total scanned", self.var_total, self._value_label_style),
+            ("Failed %", self.var_failed_pct, self._value_label_style),
+            ("Threads", self._threads_display, self._value_label_style),
+        ]
+        for idx, (title, var, style) in enumerate(stat_items):
+            stats.columnconfigure(idx * 2 + 1, weight=1)
+            ttk.Label(stats, text=f"{title}:").grid(row=0, column=idx * 2, sticky="w", padx=(8, 2), pady=4)
+            ttk.Label(stats, textvariable=var, style=style).grid(row=0, column=idx * 2 + 1, sticky="w", padx=(0, 12), pady=4)
+
+        perf_section, perf = self._create_collapsible_section(quick_and_perf, "Performance")
+        perf_section.grid(row=0, column=1, sticky="nsew", padx=(4, 0))
+        for col in range(3):
+            perf.columnconfigure(col, weight=1)
+        perf_vars = [self.s_elapsed, self.s_eta, self.s_ips, self.s_rps, self.s_fpm, self.s_avgping, self.s_hit, self.s_cpu, self.s_ram]
+        for idx, var in enumerate(perf_vars):
+            row, col = divmod(idx, 3)
+            ttk.Label(perf, textvariable=var).grid(row=row, column=col, sticky="w", padx=8, pady=4)
+
+        network_body = ttk.Frame(network_tab)
+        network_body.pack(fill="both", expand=True)
+        network_body.columnconfigure(0, weight=1)
+
+        proxy_section, proxy_frame = self._create_collapsible_section(network_body, "Proxy Pool")
+        proxy_section.pack(fill="both", expand=True, padx=4, pady=(0, 6))
         proxy_frame.columnconfigure(0, weight=1)
         proxy_frame.columnconfigure(1, weight=0)
         proxy_frame.rowconfigure(1, weight=1)
-
         proxy_header = ttk.Frame(proxy_frame)
         proxy_header.grid(row=0, column=0, columnspan=2, sticky="ew", padx=8, pady=(6, 2))
         proxy_header.columnconfigure(0, weight=1)
@@ -809,7 +876,6 @@ class ScannerAppGUI:
             command=self.toggle_proxy_usage,
         )
         self.btn_toggle_proxy.grid(row=0, column=2, sticky="e")
-
         proxy_columns = ("proxy", "status", "latency", "ok", "pfail", "tfail")
         self.proxy_tree = ttk.Treeview(proxy_frame, columns=proxy_columns, show="headings", height=5)
         for col, title, width, anchor in [
@@ -831,7 +897,6 @@ class ScannerAppGUI:
         self.proxy_tree.configure(yscrollcommand=proxy_scroll.set)
         self.proxy_tree.grid(row=1, column=0, sticky="ew", padx=(8, 0), pady=(0, 4))
         proxy_scroll.grid(row=1, column=1, sticky="ns", padx=(0, 8), pady=(0, 4))
-
         ttk.Label(proxy_frame, text="Proxy Log").grid(row=2, column=0, sticky="w", padx=8, pady=(6, 2))
         self.proxy_log = scrolledtext.ScrolledText(
             proxy_frame,
@@ -842,29 +907,8 @@ class ScannerAppGUI:
             borderwidth=0,
         )
         self.proxy_log.grid(row=3, column=0, columnspan=2, sticky="ew", padx=8, pady=(0, 6))
-        self._refresh_proxy_health_ui()
-        self._update_proxy_toggle_button()
 
-        controls = ttk.Frame(container)
-        controls.pack(fill="x", padx=4, pady=(0, 4))
-
-        self.btn_start = ttk.Button(controls, text="Start", width=10, command=self.start_scan, style=self._primary_button_style)
-        self.btn_pause = ttk.Button(controls, text="Pause", width=10, command=self.pause_scan, state="disabled")
-        self.btn_resume = ttk.Button(controls, text="Resume", width=10, command=self.resume_scan, state="disabled")
-        self.btn_stop = ttk.Button(controls, text="Stop", width=10, command=self.stop_scan, state="disabled")
-        self.btn_start.pack(side="left")
-        self.btn_pause.pack(side="left", padx=(6, 0))
-        self.btn_resume.pack(side="left", padx=(6, 0))
-        self.btn_stop.pack(side="left", padx=(6, 0))
-
-        self.btn_open_folder = ttk.Button(controls, text="Open Output Folder", width=18, command=self.open_output_folder)
-        self.btn_change_save = ttk.Button(controls, text="Change Save Folder", width=18, command=self.change_save_directory)
-        self.btn_clear_logs = ttk.Button(controls, text="Clear Logs", width=12, command=self.clear_logs)
-        self.btn_open_folder.pack(side="right", padx=(0, 6))
-        self.btn_change_save.pack(side="right", padx=(0, 6))
-        self.btn_clear_logs.pack(side="right")
-
-        vpn_section, vpn_frame = self._create_collapsible_section(container, "VPN Control")
+        vpn_section, vpn_frame = self._create_collapsible_section(network_body, "VPN Control")
         vpn_section.pack(fill="x", padx=4, pady=(0, 6))
         vpn_controls = ttk.Frame(vpn_frame)
         vpn_controls.pack(fill="x", padx=8, pady=(4, 0))
@@ -872,7 +916,7 @@ class ScannerAppGUI:
             vpn_controls,
             text="Cycle Mullvad every 120s during scans",
             variable=self.var_mullvad_cycle,
-            command=self._on_mullvad_toggle
+            command=self._on_mullvad_toggle,
         )
         self.chk_mullvad.pack(side="left", padx=0, pady=4)
         self.btn_mullvad_now = ttk.Button(vpn_controls, text="Run Mullvad Cycle Now", width=22, command=self.run_mullvad_cycle_now)
@@ -885,41 +929,29 @@ class ScannerAppGUI:
         self.lbl_mullvad_status = ttk.Label(vpn_controls, text=mullvad_hint, style=self._muted_label_style)
         self.lbl_mullvad_status.pack(side="right", padx=8, pady=4)
 
-        stats_section, stats = self._create_collapsible_section(container, "Quick Stats")
-        stats_section.pack(fill="x", padx=4, pady=(0, 6))
-        stat_items = [
-            ("Replied", self.var_icmp, self._success_label_style),
-            ("Port open", self.var_port, self._warn_label_style),
-            ("Minecraft", self.var_mc, self._info_label_style),
-            ("Total scanned", self.var_total, self._value_label_style),
-            ("Failed %", self.var_failed_pct, self._value_label_style),
-            ("Threads", self._threads_display, self._value_label_style),
-        ]
-        for idx, (title, var, style) in enumerate(stat_items):
-            stats.columnconfigure(idx * 2 + 1, weight=1)
-            ttk.Label(stats, text=f"{title}:").grid(row=0, column=idx * 2, sticky="w", padx=(8, 2), pady=4)
-            ttk.Label(stats, textvariable=var, style=style).grid(row=0, column=idx * 2 + 1, sticky="w", padx=(0, 12), pady=4)
+        results_body = ttk.Frame(results_tab)
+        results_body.pack(fill="both", expand=True)
+        results_body.columnconfigure(0, weight=1)
 
-        perf_section, perf = self._create_collapsible_section(container, "Performance")
-        perf_section.pack(fill="x", padx=4, pady=(0, 6))
-        for col in range(3):
-            perf.columnconfigure(col, weight=1)
-        perf_vars = [self.s_elapsed, self.s_eta, self.s_ips, self.s_rps, self.s_fpm, self.s_avgping, self.s_hit, self.s_cpu, self.s_ram]
-        for idx, var in enumerate(perf_vars):
-            row, col = divmod(idx, 3)
-            ttk.Label(perf, textvariable=var).grid(row=row, column=col, sticky="w", padx=8, pady=4)
-
-        results_section, results = self._create_collapsible_section(container, "Results & Logs")
+        results_section, results_frame = self._create_collapsible_section(results_body, "Results & Logs")
         results_section.pack(fill="both", expand=True, padx=4, pady=(0, 8))
-        results.columnconfigure(0, weight=1)
-        results.columnconfigure(1, weight=1)
-        results.rowconfigure(0, weight=1)
+        results_frame.columnconfigure(0, weight=1)
+        results_frame.rowconfigure(0, weight=1)
 
-        left = ttk.Frame(results)
-        left.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        results_paned = ttk.Panedwindow(results_frame, orient="horizontal")
+        results_paned.grid(row=0, column=0, sticky="nsew")
+
+        left = ttk.Frame(results_paned)
         left.columnconfigure(0, weight=1)
         left.rowconfigure(0, weight=2)
         left.rowconfigure(1, weight=1)
+        right = ttk.Frame(results_paned)
+        right.columnconfigure(0, weight=1)
+        right.rowconfigure(0, weight=1)
+        right.rowconfigure(1, weight=1)
+        right.rowconfigure(2, weight=0)
+        results_paned.add(left, weight=3)
+        results_paned.add(right, weight=4)
 
         log_section, log_frame = self._create_collapsible_section(left, "Log")
         log_section.grid(row=0, column=0, sticky="nsew")
@@ -934,12 +966,6 @@ class ScannerAppGUI:
         ctl_frame.rowconfigure(0, weight=1)
         self.ctl = scrolledtext.ScrolledText(ctl_frame, state="disabled", height=6, font=("Consolas", 9), relief="flat", borderwidth=0)
         self.ctl.grid(row=0, column=0, sticky="nsew")
-
-        right = ttk.Frame(results)
-        right.grid(row=0, column=1, sticky="nsew")
-        right.columnconfigure(0, weight=1)
-        right.rowconfigure(0, weight=1)
-        right.rowconfigure(1, weight=1)
 
         columns = ("address", "version", "players", "confidence", "motd", "found", "ping", "bars", "hint")
         servers_section, servers_frame = self._create_collapsible_section(right, "Confirmed Minecraft Servers")
@@ -996,14 +1022,21 @@ class ScannerAppGUI:
         self.btn_del_sel.pack(side="left", padx=(6, 0))
         self.btn_del_all.pack(side="left", padx=(6, 0))
 
+        footer = ttk.Frame(container, padding=(4, 4, 4, 0))
+        footer.grid(row=1, column=0, sticky="ew")
+        footer.columnconfigure(0, weight=1)
+        footer.columnconfigure(1, weight=0)
+
         self.save_hint = tk.StringVar(value=f"Saves to: {self.storage.output_path}")
-        self.lbl_save_hint = ttk.Label(container, textvariable=self.save_hint, style=self._muted_label_style)
-        self.lbl_save_hint.pack(anchor="w", padx=6, pady=(4, 0))
+        self.lbl_save_hint = ttk.Label(footer, textvariable=self.save_hint, style=self._muted_label_style)
+        self.lbl_save_hint.grid(row=0, column=0, sticky="w")
 
         self.status = tk.StringVar(value="Ready")
-        self.lbl_status = ttk.Label(container, textvariable=self.status, style="Status.TLabel")
-        self.lbl_status.pack(fill="x", padx=6, pady=(0, 6))
+        self.lbl_status = ttk.Label(footer, textvariable=self.status, style="Status.TLabel")
+        self.lbl_status.grid(row=0, column=1, sticky="e")
 
+        self._refresh_proxy_health_ui()
+        self._update_proxy_toggle_button()
         self.btn_mullvad_now.config(state="normal" if self.vpn_manager.cli_path else "disabled")
         self._update_mullvad_label()
         self._apply_theme()
