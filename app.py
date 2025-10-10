@@ -495,6 +495,7 @@ class ScannerAppGUI:
         self._max_scan_delay = 250.0
         self._adaptive_scan_delay = 0.0
         self._last_delay_adjust = 0.0
+        self.adaptive_delay_enabled = False
 
         # --- Persistence throttling ---
         self._save_lock = threading.Lock()
@@ -521,7 +522,7 @@ class ScannerAppGUI:
         self.current_concurrency = DEFAULT_WORKERS
         self.max_concurrency = DEFAULT_WORKERS
         self.auto_limit_on = True
-        self.failed_window = []
+        self.failed_window = deque(maxlen=240)
         self.auto_limit_threshold = 0.95
         self.auto_limit_cooldown = 20
         self._last_auto_change = 0
@@ -549,6 +550,7 @@ class ScannerAppGUI:
         self.var_vpn_cycle_scans = tk.IntVar(value=0)
         self.var_scan_delay = tk.DoubleVar(value=0.0)
         self.var_scan_delay_max = tk.DoubleVar(value=250.0)
+        self.var_adaptive_delay = tk.BooleanVar(value=False)
         self._update_scan_delay_settings()
         self._adaptive_scan_delay = self._base_scan_delay
 
@@ -632,6 +634,12 @@ class ScannerAppGUI:
         ttk.Checkbutton(options, text="Require ping response", variable=self.var_require_ping).grid(row=0, column=1, sticky="w", padx=8, pady=2)
         ttk.Checkbutton(options, text="Auto thread limit", variable=self.var_auto_limit).grid(row=0, column=2, sticky="w", padx=8, pady=2)
         ttk.Checkbutton(options, text="Dark mode", variable=self.var_dark_mode, command=self._toggle_theme).grid(row=0, column=3, sticky="w", padx=8, pady=2)
+        ttk.Checkbutton(
+            options,
+            text="Adaptive scan delay",
+            variable=self.var_adaptive_delay,
+            command=self._on_adaptive_delay_toggle
+        ).grid(row=1, column=0, sticky="w", padx=8, pady=2)
 
         tools = ttk.LabelFrame(container, text="Verification & Tools")
         tools.pack(fill="x", padx=4, pady=(0, 6))
@@ -643,6 +651,8 @@ class ScannerAppGUI:
 
         ttk.Label(tools, text="Host override").grid(row=1, column=0, sticky="w", padx=(8, 4), pady=4)
         self.var_host_override = tk.StringVar(value="")
+        self.var_host_override.trace_add("write", self._on_host_override_change)
+        self._on_host_override_change()
         ttk.Entry(tools, textvariable=self.var_host_override).grid(row=1, column=1, sticky="ew", padx=(0, 12), pady=4)
 
         ttk.Label(tools, text="Direct test host").grid(row=1, column=2, sticky="w", padx=(0, 4), pady=4)
@@ -853,6 +863,21 @@ class ScannerAppGUI:
             },
         }
         self._current_theme = "dark" if self.var_dark_mode.get() else "light"
+
+    def _on_adaptive_delay_toggle(self, *args):
+        enabled = bool(self.var_adaptive_delay.get())
+        self.adaptive_delay_enabled = enabled
+        if not enabled:
+            self._adaptive_scan_delay = self._base_scan_delay
+        else:
+            if self._adaptive_scan_delay <= 0.0:
+                self._adaptive_scan_delay = self._base_scan_delay
+            self._adaptive_scan_delay = max(self._base_scan_delay, min(self._max_scan_delay, self._adaptive_scan_delay))
+        self._last_delay_adjust = time.time()
+
+    def _on_host_override_change(self, *args):
+        value = self.var_host_override.get().strip()
+        self._host_override_for_scan = value or None
 
     def _toggle_theme(self):
         self._current_theme = "dark" if self.var_dark_mode.get() else "light"
@@ -1197,11 +1222,11 @@ class ScannerAppGUI:
         self._vpn_guard_triggered = False
         self._update_scan_delay_settings()
         self._adaptive_scan_delay = self._base_scan_delay
-        self._last_delay_adjust = time.time()
+        self._on_adaptive_delay_toggle()
         self.var_icmp.set(0); self.var_port.set(0); self.var_mc.set(0); self.var_total.set(0)
         self.ping_attempts = 0
         self.ping_failures = 0
-        self.failed_window = []
+        self.failed_window.clear()
         self._ping_sum = 0.0; self._ping_count = 0
         self.processed = 0
         self._stable_ok_windows = 0
@@ -1357,6 +1382,10 @@ class ScannerAppGUI:
     def _update_delay_from_rate(self, failure_rate: float):
         """Adjust adaptive delay based on recent failure rate."""
         base, max_delay = self._update_scan_delay_settings()
+        if not self.adaptive_delay_enabled:
+            self._adaptive_scan_delay = base
+            self._last_delay_adjust = time.time()
+            return self._adaptive_scan_delay
         rate = max(0.0, min(1.0, failure_rate))
         span = max(0.0, max_delay - base)
         target = base + span * rate
@@ -1373,6 +1402,8 @@ class ScannerAppGUI:
     def _current_delay_ms(self):
         """Return the current per-submit delay in milliseconds."""
         base, max_delay = self._base_scan_delay, self._max_scan_delay
+        if not self.adaptive_delay_enabled:
+            return max(0.0, base)
         if max_delay <= 0.0 and base <= 0.0:
             return 0.0
         return max(base, min(max_delay, self._adaptive_scan_delay))
@@ -1391,18 +1422,25 @@ class ScannerAppGUI:
             self.auto_limit_threshold = max(0.50, min(0.999, float(self.var_failthr.get())/100.0))
         except Exception:
             pass
-        if not self.auto_limit_on:
-            self._update_delay_from_rate(0.0)
-            return
+        window = list(self.failed_window)
+        if len(window) > 120:
+            window = window[-120:]
+        rate = (sum(window) / len(window)) if window else 0.0
         now = time.time()
-        if now - self._last_auto_change < self.auto_limit_cooldown:
-            window = self.failed_window[-120:] if len(self.failed_window) >= 120 else self.failed_window[:]
-            rate = (sum(1 for x in window if x) / len(window)) if window else 0.0
-            self._update_delay_from_rate(rate)
+        if not self.auto_limit_on:
+            if self.adaptive_delay_enabled:
+                self._update_delay_from_rate(0.0)
+            else:
+                self._adaptive_scan_delay = self._base_scan_delay
+                self._last_delay_adjust = now
             return
-        window = self.failed_window[-120:] if len(self.failed_window) >= 120 else self.failed_window[:]
-        rate = (sum(1 for x in window if x) / len(window)) if window else 0.0
-        self._update_delay_from_rate(rate)
+        if self.adaptive_delay_enabled:
+            self._update_delay_from_rate(rate)
+        else:
+            self._adaptive_scan_delay = self._base_scan_delay
+            self._last_delay_adjust = now
+        if now - self._last_auto_change < self.auto_limit_cooldown:
+            return
         if len(window) < 60:
             return
         if rate >= self.auto_limit_threshold:
@@ -1444,7 +1482,6 @@ class ScannerAppGUI:
 
             self.var_total.set(self.var_total.get() + 1)
             self.processed += 1
-            self._host_override_for_scan = self.var_host_override.get().strip() or None
 
             # Single ping attempt - track stats, but DO NOT log failures to main log
             try:
@@ -2591,7 +2628,7 @@ def main():
             self.ping_failures = 0
             self._ping_sum = 0.0
             self._ping_count = 0
-            self.failed_window = []
+            self.failed_window = deque(maxlen=240)
 
             self.known_confirmed = set()
             self.known_maybe = set()
