@@ -109,7 +109,8 @@ class ProxyPool:
         for idx, (host, port) in enumerate(proxies):
             stats = ProxyStats(host=host, port=port, index=idx)
             self._stats.append(stats)
-            self._push(stats, available_at=0.0)
+            with self._cv:
+                self._push(stats, available_at=0.0)
 
     # ------------------------------------------------------------------ #
     # Construction helpers
@@ -426,4 +427,3 @@ class ProxyPool:
             0x08: "Address type not supported",
         }
         return mapping.get(code, f"Proxy reported error code {code}")
-
