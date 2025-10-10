@@ -7,6 +7,14 @@ servers to explore. The project includes both a Tkinter GUI and a console-first
 scanning engine so you can run it interactively or unattended on a headless
 machine.
 
+> ⚠️ **Important:** Only scan IP ranges that you own or have explicit permission to
+> test. Unauthorised scanning may violate local laws, ISP terms of service or the
+> acceptable use policies of hosting providers. The maintainers and contributors
+> of this project accept no responsibility for misuse or for any legal or
+> contractual issues that arise from how you choose to deploy the scanner. By
+> using the tool you agree that you are solely accountable for complying with all
+> applicable laws and agreements.
+
 ## Highlights
 
 - **Multi-threaded scanning engine** – efficiently probes thousands of hosts
