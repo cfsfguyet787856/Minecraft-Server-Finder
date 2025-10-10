@@ -54,7 +54,7 @@ except Exception:
 _gui_available = True
 try:
     import tkinter as tk
-    from tkinter import ttk, messagebox, scrolledtext
+    from tkinter import ttk, messagebox, scrolledtext, filedialog
 except Exception:
     _gui_available = False
 
@@ -491,6 +491,10 @@ class ScannerAppGUI:
         self._scans_since_vpn_cycle = 0
         self._vpn_guard_last_check = 0.0
         self._vpn_guard_triggered = False
+        self._base_scan_delay = 0.0
+        self._max_scan_delay = 250.0
+        self._adaptive_scan_delay = 0.0
+        self._last_delay_adjust = 0.0
 
         # --- Persistence throttling ---
         self._save_lock = threading.Lock()
@@ -543,6 +547,10 @@ class ScannerAppGUI:
         self.var_timeout      = tk.DoubleVar(value=DEFAULT_TIMEOUT)
         self.var_mullvad_cycle = tk.BooleanVar(value=False)
         self.var_vpn_cycle_scans = tk.IntVar(value=0)
+        self.var_scan_delay = tk.DoubleVar(value=0.0)
+        self.var_scan_delay_max = tk.DoubleVar(value=250.0)
+        self._update_scan_delay_settings()
+        self._adaptive_scan_delay = self._base_scan_delay
 
         # --- Performance strip StringVars ---
         self.s_elapsed  = tk.StringVar(value="Elapsed: 00:00")
@@ -610,6 +618,10 @@ class ScannerAppGUI:
 
         ttk.Label(settings, text="Fail% threshold").grid(row=1, column=0, sticky="w", padx=(8, 4), pady=4)
         ttk.Entry(settings, textvariable=self.var_failthr, width=8).grid(row=1, column=1, sticky="w", padx=(0, 12), pady=4)
+        ttk.Label(settings, text="Base delay (ms)").grid(row=1, column=2, sticky="w", padx=(0, 4), pady=4)
+        ttk.Entry(settings, textvariable=self.var_scan_delay, width=8).grid(row=1, column=3, sticky="w", padx=(0, 12), pady=4)
+        ttk.Label(settings, text="Max delay (ms)").grid(row=1, column=4, sticky="w", padx=(0, 4), pady=4)
+        ttk.Entry(settings, textvariable=self.var_scan_delay_max, width=8).grid(row=1, column=5, sticky="w", padx=(0, 12), pady=4)
 
         options = ttk.LabelFrame(container, text="Scan Options")
         options.pack(fill="x", padx=4, pady=(0, 6))
@@ -650,10 +662,12 @@ class ScannerAppGUI:
         self.btn_resume.pack(side="left", padx=(6, 0))
         self.btn_stop.pack(side="left", padx=(6, 0))
 
-        self.btn_clear_logs = ttk.Button(controls, text="Clear Logs", width=12, command=self.clear_logs)
         self.btn_open_folder = ttk.Button(controls, text="Open Output Folder", width=18, command=self.open_output_folder)
-        self.btn_clear_logs.pack(side="right")
+        self.btn_change_save = ttk.Button(controls, text="Change Save Folder", width=18, command=self.change_save_directory)
+        self.btn_clear_logs = ttk.Button(controls, text="Clear Logs", width=12, command=self.clear_logs)
         self.btn_open_folder.pack(side="right", padx=(0, 6))
+        self.btn_change_save.pack(side="right", padx=(0, 6))
+        self.btn_clear_logs.pack(side="right")
 
         vpn_frame = ttk.LabelFrame(container, text="VPN Control")
         vpn_frame.pack(fill="x", padx=4, pady=(0, 6))
@@ -745,15 +759,16 @@ class ScannerAppGUI:
         self.tree.grid(row=0, column=0, sticky="nsew")
         tree_scroll_y.grid(row=0, column=1, sticky="ns")
 
-        mcols = ("address", "reason", "seen", "last_try")
-        maybe_frame = ttk.LabelFrame(right, text="Maybe Servers & Open Ports")
+        mcols = ("address", "reason", "hint", "seen", "last_try")
+        maybe_frame = ttk.LabelFrame(right, text="Potential Servers")
         maybe_frame.grid(row=1, column=0, sticky="nsew", pady=(8, 0))
         maybe_frame.columnconfigure(0, weight=1)
         maybe_frame.rowconfigure(0, weight=1)
         self.maybe_tree = ttk.Treeview(maybe_frame, columns=mcols, show="headings", selectmode="extended", height=6)
         for col, title, width, anc in [
             ("address", "Address / IP", 200, "w"),
-            ("reason", "Reason", 150, "center"),
+            ("reason", "Confidence", 130, "center"),
+            ("hint", "Notes", 160, "w"),
             ("seen", "First Seen", 150, "center"),
             ("last_try", "Last Try", 150, "center"),
         ]:
@@ -766,10 +781,12 @@ class ScannerAppGUI:
 
         actions_right = ttk.Frame(right)
         actions_right.grid(row=2, column=0, sticky="ew", pady=(8, 0))
-        self.btn_copy_sel = ttk.Button(actions_right, text="Copy Selected", width=16, command=self.copy_selected)
-        self.btn_del_sel = ttk.Button(actions_right, text="Delete Selected", width=16, command=self.delete_selected)
-        self.btn_del_all = ttk.Button(actions_right, text="Delete All Maybe", width=16, command=self.delete_all_maybe)
+        self.btn_copy_sel = ttk.Button(actions_right, text="Copy Selected", width=18, command=self.copy_selected)
+        self.btn_recheck = ttk.Button(actions_right, text="Recheck Selected", width=18, command=self.recheck_selected_servers)
+        self.btn_del_sel = ttk.Button(actions_right, text="Delete Selected", width=18, command=self.delete_selected)
+        self.btn_del_all = ttk.Button(actions_right, text="Clear Potential", width=18, command=self.delete_all_maybe)
         self.btn_copy_sel.pack(side="left")
+        self.btn_recheck.pack(side="left", padx=(6, 0))
         self.btn_del_sel.pack(side="left", padx=(6, 0))
         self.btn_del_all.pack(side="left", padx=(6, 0))
 
@@ -921,11 +938,21 @@ class ScannerAppGUI:
                 self.log.tag_config("blue", foreground=palette["info"])
                 self.log.tag_config("red", foreground=palette["danger"])
                 self.log.tag_config("info", foreground=palette["muted"])
+                self.log.tag_config("muted", foreground=palette["muted"])
             except Exception:
                 pass
         if hasattr(self, "ctl"):
             try:
                 self.ctl.configure(bg=palette["bg_alt"], fg=palette["fg"], insertbackground=palette["fg"], highlightthickness=0, borderwidth=0)
+                self.ctl.tag_config("info", foreground=palette["fg"])
+                self.ctl.tag_config("warn", foreground=palette["warn"])
+                self.ctl.tag_config("error", foreground=palette["danger"])
+                self.ctl.tag_config("vpn", foreground=palette["info"])
+                self.ctl.tag_config("threads", foreground=palette["accent"])
+                self.ctl.tag_config("scan", foreground=palette["success"])
+                self.ctl.tag_config("maybe", foreground=palette["warn"])
+                self.ctl.tag_config("files", foreground=palette["accent"])
+                self.ctl.tag_config("server", foreground=palette["success"])
             except Exception:
                 pass
 
@@ -960,10 +987,10 @@ class ScannerAppGUI:
         except Exception:
             pass
 
-    def _ctl_async(self, msg: str):
+    def _ctl_async(self, msg: str, tag: str = None):
         if not msg:
             return
-        self._run_on_ui(self._ctl_log, msg)
+        self._run_on_ui(self._ctl_log, msg, tag)
 
     def _update_mullvad_label(self):
         try:
@@ -1162,12 +1189,15 @@ class ScannerAppGUI:
         details = server_hint or ", ".join([p for p in (city, country) if p]) or "unknown location"
         msg = f"[VPN] Active exit IP {ip or '?'} via {details}."
         self._uiq_put(("log", msg, "info"))
-        self._ctl_async(msg)
+        self._ctl_async(msg, tag="vpn")
         self._stop.clear()
         self._pause.clear()
         with self._vpn_cycle_lock:
             self._scans_since_vpn_cycle = 0
         self._vpn_guard_triggered = False
+        self._update_scan_delay_settings()
+        self._adaptive_scan_delay = self._base_scan_delay
+        self._last_delay_adjust = time.time()
         self.var_icmp.set(0); self.var_port.set(0); self.var_mc.set(0); self.var_total.set(0)
         self.ping_attempts = 0
         self.ping_failures = 0
@@ -1277,6 +1307,14 @@ class ScannerAppGUI:
                 if active >= allowed:
                     time.sleep(0.002)
                     continue
+                delay_ms = self._current_delay_ms()
+                if delay_ms > 0:
+                    jitter = random.uniform(0.0, min(delay_ms, 50.0))
+                    actual_delay = min(self._max_scan_delay, delay_ms + jitter)
+                    time.sleep(actual_delay / 1000.0)
+                else:
+                    # Add slight jitter to mimic organic traffic even when delay is zero
+                    time.sleep(random.uniform(0.0, 0.003))
                 try:
                     with self._active_tasks_lock:
                         self._active_tasks += 1
@@ -1297,6 +1335,48 @@ class ScannerAppGUI:
 # ============================== SECTION 6: CONTROLS / SUBMITTER (END) =========================================
 
 # ============================== SECTION 7: AUTO LIMIT / WORKER (START) ==============================
+    def _update_scan_delay_settings(self):
+        """Refresh cached delay settings from UI variables."""
+        try:
+            base = max(0.0, float(self.var_scan_delay.get()))
+        except Exception:
+            base = 0.0
+        try:
+            max_delay = float(self.var_scan_delay_max.get())
+        except Exception:
+            max_delay = base
+        if not math.isfinite(base):
+            base = 0.0
+        if not math.isfinite(max_delay):
+            max_delay = base
+        max_delay = max(base, max_delay)
+        self._base_scan_delay = base
+        self._max_scan_delay = max_delay
+        return base, max_delay
+
+    def _update_delay_from_rate(self, failure_rate: float):
+        """Adjust adaptive delay based on recent failure rate."""
+        base, max_delay = self._update_scan_delay_settings()
+        rate = max(0.0, min(1.0, failure_rate))
+        span = max(0.0, max_delay - base)
+        target = base + span * rate
+        if not math.isfinite(target):
+            target = base
+        if self._adaptive_scan_delay <= 0.0:
+            blended = target
+        else:
+            blended = (self._adaptive_scan_delay * 0.6) + (target * 0.4)
+        self._adaptive_scan_delay = max(base, min(max_delay, blended))
+        self._last_delay_adjust = time.time()
+        return self._adaptive_scan_delay
+
+    def _current_delay_ms(self):
+        """Return the current per-submit delay in milliseconds."""
+        base, max_delay = self._base_scan_delay, self._max_scan_delay
+        if max_delay <= 0.0 and base <= 0.0:
+            return 0.0
+        return max(base, min(max_delay, self._adaptive_scan_delay))
+
     def _adaptive_timeout(self, base_timeout):
         # Keep minimal: use average ping to slightly stretch timeout
         if self._ping_count:
@@ -1312,14 +1392,19 @@ class ScannerAppGUI:
         except Exception:
             pass
         if not self.auto_limit_on:
+            self._update_delay_from_rate(0.0)
             return
         now = time.time()
         if now - self._last_auto_change < self.auto_limit_cooldown:
+            window = self.failed_window[-120:] if len(self.failed_window) >= 120 else self.failed_window[:]
+            rate = (sum(1 for x in window if x) / len(window)) if window else 0.0
+            self._update_delay_from_rate(rate)
             return
         window = self.failed_window[-120:] if len(self.failed_window) >= 120 else self.failed_window[:]
+        rate = (sum(1 for x in window if x) / len(window)) if window else 0.0
+        self._update_delay_from_rate(rate)
         if len(window) < 60:
             return
-        rate = sum(1 for x in window if x) / len(window)
         if rate >= self.auto_limit_threshold:
             with self._concurrency_lock:
                 new_limit = max(8, int(self.current_concurrency * 0.7))
@@ -1328,17 +1413,18 @@ class ScannerAppGUI:
                     self._last_auto_change = now
                     msg = f"[Auto] High ping failures {rate*100:.1f}% - threads={self.current_concurrency}"
                     self._uiq_put(("log", msg, "orange"))
-                    self._ctl_async(msg)
+                    self._ctl_async(msg, tag="threads")
+            self._stable_ok_windows = 0
         else:
             if self.current_concurrency < self.max_concurrency:
                 self._stable_ok_windows += 1
                 if self._stable_ok_windows >= 3:
                     with self._concurrency_lock:
-                        self.current_concurrency = min(self.max_concurrency, self.current_concurrency + 2)
+                        self.current_concurrency = min(self.max_concurrency, self.current_concurrency + 10)
                         self._last_auto_change = now
                         msg = f"[Auto] Stable - threads={self.current_concurrency}"
                         self._uiq_put(("log", msg, "info"))
-                        self._ctl_async(msg)
+                        self._ctl_async(msg, tag="threads")
                     self._stable_ok_windows = 0
             else:
                 self._stable_ok_windows = 0
@@ -1380,7 +1466,7 @@ class ScannerAppGUI:
             else:
                 self.ping_failures += 1
                 self.failed_window.append(True)
-                # No failed-ping line in main log
+                self._uiq_put(("log", f"{ip} - ping failed", "muted"))
                 if self.var_require_ping.get():
                     self._auto_limit_evaluate()
                     return
@@ -1412,52 +1498,101 @@ class ScannerAppGUI:
                     pass
                 self._save_current_blob()
                 ok2, info2, conf2, sources2 = _extra_fallback_probe(ip, dyn_timeout, handshake_host=self._host_override_for_scan)
+                addr = f"{ip}:{DEFAULT_PORT}"
                 if ok2:
                     conf_label = self._normalize_confidence(conf2, "Possible")
-                    addr = f"{ip}:{DEFAULT_PORT}"
-                    if addr not in self.known_confirmed:
+                    confidence_lower = (conf_label or "").lower()
+                    if confidence_lower in {"possible", "unlikely"}:
+                        info = self._add_maybe_server(addr, reason=confidence_lower, hint="java")
+                        if info["created"] or info["reason_changed"]:
+                            self._ctl_async(f"[MAYBE] {addr} recorded ({conf_label})", tag="maybe")
+                        self._uiq_put(("log", f"{addr} - possible Java server ({conf_label})", "orange"))
+                    else:
                         players = info2.get("players") if isinstance(info2, dict) else None
                         maxp = info2.get("max") if isinstance(info2, dict) else None
                         version = (info2.get("version") if isinstance(info2, dict) else "-") or "-"
-                        motd = ((info2.get("motd") if isinstance(info2, dict) else "") or "").replace("\n"," ")[:120]
+                        motd = ((info2.get("motd") if isinstance(info2, dict) else "") or "").replace("\n", " ")[:120]
                         hint = info2.get("hint") if isinstance(info2, dict) else None
                         pstr = f"{players}/{maxp}" if (players is not None and maxp is not None) else (str(players) if players is not None else "?")
-                        bars = ping_to_bars(rtt if ok_ping else None)
-                        rec = {"address": addr, "version": version, "players": pstr, "motd": motd, "confidence": conf_label,
-                               "found_at": datetime.now().isoformat(timespec='seconds'), "ping": rtt if ok_ping else None, "bars": bars, "hint": hint}
-                        self.servers.append(rec); self.known_confirmed.add(addr)
-                        self.var_mc.set(self.var_mc.get() + 1)
-                        self._append_server_to_file(addr, version, pstr, rec["confidence"], motd)
-                        self._save_current_blob()
-                        self.refresh_table(incremental=rec)
+                        rec = {
+                            "address": addr,
+                            "version": version,
+                            "players": pstr,
+                            "motd": motd,
+                            "confidence": conf_label,
+                            "found_at": datetime.now().isoformat(timespec="seconds"),
+                            "ping": rtt if ok_ping else None,
+                            "bars": ping_to_bars(rtt if ok_ping else None),
+                            "hint": hint or (", ".join(sorted(sources2)) if sources2 else ""),
+                        }
+                        existing = next((s for s in self.servers if s.get("address") == addr), None)
+                        if existing:
+                            existing.update(rec)
+                        else:
+                            self.servers.append(rec)
+                            self.known_confirmed.add(addr)
+                            self.var_mc.set(self.var_mc.get() + 1)
+                            self._append_server_to_file(addr, version, pstr, conf_label, motd)
+                            self.refresh_table(incremental=rec)
+                        self._remove_maybe_server(addr)
+                        self._save_current_blob(immediate=True)
                         origin = ", ".join(sorted(sources2)) if sources2 else "unknown"
-                        self._ctl_async(f"[MC] {addr} confirmed ({conf_label}) via {origin}")
+                        self._ctl_async(f"[MC] {addr} confirmed ({conf_label}) via {origin}", tag="server")
+                        self._uiq_put(("log", f"{addr} confirmed ({conf_label}) via {origin}", "green"))
                 else:
-                    self._ctl_async(f"[MC] {ip}:25565 open but no reliable Minecraft signature detected.")
+                    info = self._add_maybe_server(addr, reason="possible", hint="port-open")
+                    if info["created"] or info["reason_changed"]:
+                        self._ctl_async(f"[MAYBE] {addr} open but no protocol response", tag="maybe")
+                    self._uiq_put(("log", f"{addr} open but no reliable Minecraft signature detected.", "orange"))
 
-            # Bedrock details
             if ok_bedrock and info_b:
                 addr_b = f"{ip}:{DEFAULT_BEDROCK_PORT}"
-                if addr_b not in self.known_confirmed:
-                    conf_b = self._normalize_confidence("Possible", "Possible")
-                    version = info_b.get("version","-") or "-"
+                conf_b = self._normalize_confidence("Possible", "Possible")
+                conf_b_lower = conf_b.lower()
+                if conf_b_lower in {"possible", "unlikely"}:
+                    info = self._add_maybe_server(addr_b, reason=conf_b_lower, hint="bedrock")
+                    if info["created"] or info["reason_changed"]:
+                        self._ctl_async(f"[MAYBE] {addr_b} recorded ({conf_b})", tag="maybe")
+                    self._uiq_put(("log", f"{addr_b} bedrock response ({conf_b})", "blue"))
+                else:
+                    version = info_b.get("version", "-") or "-"
                     players = info_b.get("players")
                     maxp = info_b.get("max")
                     pstr = f"{players}/{maxp}" if (players is not None and maxp is not None) else (str(players) if players is not None else "?")
                     motd = (info_b.get("motd") or "").replace("\n", " ")[:120]
-                    bars = ping_to_bars(rtt_b)
-                    rec = {"address": addr_b, "version": version, "players": pstr, "motd": motd, "confidence": conf_b,
-                           "found_at": datetime.now().isoformat(timespec='seconds'), "ping": rtt_b, "bars": bars, "hint": "Bedrock"}
-                    self.servers.append(rec); self.known_confirmed.add(addr_b)
-                    self.var_mc.set(self.var_mc.get() + 1)
-                    try:
-                        self._append_open_port_to_file(addr_b)
-                    except Exception:
-                        pass
-                    self._append_server_to_file(addr_b, version, pstr, conf_b, motd)
-                    self._save_current_blob()
-                    self.refresh_table(incremental=rec)
-                    self._ctl_async(f"[MC] {addr_b} confirmed ({conf_b}) via bedrock ping")
+                    rec = {
+                        "address": addr_b,
+                        "version": version,
+                        "players": pstr,
+                        "motd": motd,
+                        "confidence": conf_b,
+                        "found_at": datetime.now().isoformat(timespec="seconds"),
+                        "ping": rtt_b,
+                        "bars": ping_to_bars(rtt_b),
+                        "hint": "Bedrock",
+                    }
+                    existing = next((s for s in self.servers if s.get("address") == addr_b), None)
+                    if existing:
+                        existing.update(rec)
+                    else:
+                        self.servers.append(rec)
+                        self.known_confirmed.add(addr_b)
+                        self.var_mc.set(self.var_mc.get() + 1)
+                        try:
+                            self._append_open_port_to_file(addr_b)
+                        except Exception:
+                            pass
+                        self._append_server_to_file(addr_b, version, pstr, conf_b, motd)
+                        self.refresh_table(incremental=rec)
+                    self._remove_maybe_server(addr_b)
+                    self._save_current_blob(immediate=True)
+                    self._ctl_async(f"[MC] {addr_b} confirmed ({conf_b}) via bedrock ping", tag="server")
+                    self._uiq_put(("log", f"{addr_b} confirmed via bedrock", "green"))
+            elif ok_bedrock:
+                addr_b = f"{ip}:{DEFAULT_BEDROCK_PORT}"
+                info = self._add_maybe_server(addr_b, reason="possible", hint="bedrock-port")
+                if info["created"] or info["reason_changed"]:
+                    self._ctl_async(f"[MAYBE] {addr_b} recorded (bedrock port)", tag="maybe")
 
             self._auto_limit_evaluate()
         except Exception as exc:
@@ -1714,14 +1849,40 @@ class ScannerAppGUI:
             self.log.see("end")
         except Exception:
             print(msg)
-        self._ctl_async(msg)
+        self._ctl_async(msg, tag="info")
 
-    def _ctl_log(self, msg: str):
+    def _resolve_ctl_tag(self, msg: str, explicit: str = None) -> str:
+        if explicit:
+            return explicit
+        lower = (msg or "").lower()
+        if "[vpn" in lower or "mullvad" in lower or "[lockdown" in lower:
+            return "vpn"
+        if "[auto]" in lower or "threads=" in lower:
+            return "threads"
+        if lower.startswith("[scan]"):
+            return "scan"
+        if lower.startswith("[recheck]") or "[mc]" in lower:
+            return "server"
+        if "[maybe]" in lower or "potential" in lower:
+            return "maybe"
+        if "[files]" in lower or "folder" in lower or "save" in lower:
+            return "files"
+        if lower.startswith("[warn]") or "warn" in lower:
+            return "warn"
+        if lower.startswith("[error]") or "error" in lower:
+            return "error"
+        return "info"
+
+    def _ctl_log(self, msg: str, tag: str = None):
+        resolved_tag = self._resolve_ctl_tag(msg, tag)
         try:
-            self.ctl.configure(state="normal")
-            self.ctl.insert("end", msg + "\n")
-            self.ctl.configure(state="disabled")
-            self.ctl.see("end")
+            if hasattr(self, "ctl"):
+                self.ctl.configure(state="normal")
+                self.ctl.insert("end", msg + "\n", resolved_tag)
+                self.ctl.configure(state="disabled")
+                self.ctl.see("end")
+            else:
+                print(msg)
         except Exception:
             print(msg)
 # ============================== SECTION 8: GUI HELPERS / STATS / TICK (END) ==============================
@@ -1782,8 +1943,8 @@ class ScannerAppGUI:
     def _flush_delayed_save(self):
         with self._save_lock:
             self._save_pending = False
-        self._last_save = time.time()
-    self._write_current_blob()
+            self._last_save = time.time()
+        self._write_current_blob()
 
     def _write_current_blob(self):
         """Persist current state to saved_servers.json."""
@@ -1801,6 +1962,7 @@ class ScannerAppGUI:
         values = (
             address,
             rec.get("reason", "-"),
+            rec.get("hint", ""),
             rec.get("seen", ""),
             rec.get("last_try", ""),
         )
@@ -1823,8 +1985,10 @@ class ScannerAppGUI:
 
     def _add_maybe_server(self, address, reason="uncertain", hint=None):
         if not address:
-            return
+            return {"created": False, "reason_changed": False, "record": None}
         now = datetime.now().isoformat(timespec="seconds")
+        created = False
+        reason_changed = False
         with self._maybe_lock:
             existing = None
             for rec in self.maybe_list:
@@ -1832,11 +1996,14 @@ class ScannerAppGUI:
                     existing = rec
                     break
             if existing:
+                prev_reason = existing.get("reason")
+                prev_hint = existing.get("hint")
                 existing["last_try"] = now
                 if reason:
                     existing["reason"] = reason
                 if hint:
                     existing["hint"] = hint
+                reason_changed = bool(reason and reason != prev_reason)
                 updated = dict(existing)
             else:
                 rec = {
@@ -1849,12 +2016,14 @@ class ScannerAppGUI:
                 self.maybe_list.append(rec)
                 self.known_maybe.add(address)
                 updated = dict(rec)
+                created = True
         self._run_on_ui(self._refresh_single_maybe_ui, updated)
-        self._save_current_blob()
+        self._save_current_blob(immediate=True)
+        return {"created": created, "reason_changed": reason_changed, "record": updated}
 
     def _remove_maybe_server(self, address):
         if not address:
-            return
+            return False
         removed = False
         with self._maybe_lock:
             if address in self.known_maybe:
@@ -1863,30 +2032,47 @@ class ScannerAppGUI:
                 removed = True
         if removed:
             self._run_on_ui(self._delete_maybe_row_ui, address)
-            self._save_current_blob()
+            self._save_current_blob(immediate=True)
+        return removed
 
     def _load_saved_servers(self):
         """Load saved state into memory and tables."""
         data = self.storage.load_state() or {}
 
-        self.servers = list(data.get("servers", []))
-        self.maybe_list = list(data.get("maybe", []))
-        self.open_ports = set(data.get("open_ports", []))
-
+        raw_servers = data.get("servers", [])
         normalized_servers = []
-        for rec in self.servers:
-            if isinstance(rec, dict):
-                rec["confidence"] = self._normalize_confidence(
-                    rec.get("confidence", "Possible"), "Possible"
-                )
-                normalized_servers.append(rec)
+        for rec in raw_servers:
+            if not isinstance(rec, dict):
+                continue
+            copy = dict(rec)
+            copy["confidence"] = self._normalize_confidence(copy.get("confidence", "Possible"), "Possible")
+            normalized_servers.append(copy)
         self.servers = normalized_servers
 
-        # Restore known sets (for de-dup)
+        raw_maybe = data.get("maybe", [])
+        sanitized_maybe = []
+        now_iso = datetime.now().isoformat(timespec="seconds")
+        for rec in raw_maybe:
+            if not isinstance(rec, dict):
+                continue
+            address = rec.get("address")
+            if not address:
+                continue
+            sanitized_maybe.append(
+                {
+                    "address": address,
+                    "reason": rec.get("reason", "possible"),
+                    "hint": rec.get("hint", ""),
+                    "seen": rec.get("seen") or now_iso,
+                    "last_try": rec.get("last_try") or rec.get("seen") or now_iso,
+                }
+            )
+        self.maybe_list = sanitized_maybe
+        self.open_ports = set(data.get("open_ports", []))
+
         self.known_confirmed = {rec.get("address") for rec in self.servers if rec.get("address")}
         self.known_maybe = {rec.get("address") for rec in self.maybe_list if rec.get("address")}
 
-        # Populate GUI tables if they exist
         if hasattr(self, "tree"):
             for row in self.tree.get_children():
                 self.tree.delete(row)
@@ -1915,7 +2101,8 @@ class ScannerAppGUI:
                     "end",
                     values=(
                         rec.get("address", "-"),
-                        rec.get("reason", "open-port"),
+                        rec.get("reason", "possible"),
+                        rec.get("hint", ""),
                         rec.get("seen", ""),
                         rec.get("last_try", ""),
                     ),
@@ -1932,6 +2119,12 @@ class ScannerAppGUI:
                 return
             if incremental and isinstance(incremental, dict):
                 rec = incremental
+                address = rec.get("address", "-")
+                for iid in self.tree.get_children():
+                    vals = self.tree.item(iid, "values")
+                    if vals and vals[0] == address:
+                        self.tree.delete(iid)
+                        break
                 self.tree.insert(
                     "", "end", values=(
                         rec.get("address","-"),
@@ -1999,7 +2192,7 @@ class ScannerAppGUI:
             self.ctl.configure(state="normal")
             self.ctl.delete("1.0", "end")
             self.ctl.configure(state="disabled")
-            self._ctl_log("Logs cleared.")
+            self._ctl_async("Logs cleared.", tag="info")
         except Exception:
             pass
 
@@ -2014,9 +2207,27 @@ class ScannerAppGUI:
                 subprocess.Popen(["open", folder])
             else:
                 subprocess.Popen(["xdg-open", folder])
-            self._ctl_log(f"Opened folder: {folder}")
+            self._ctl_async(f"[FILES] Opened folder: {folder}", tag="files")
         except Exception as e:
-            self._ctl_log(f"Open folder failed: {e}")
+            self._ctl_async(f"[FILES] Open folder failed: {e}", tag="error")
+
+    def change_save_directory(self):
+        """Allow the user to pick a new directory for server persistence."""
+        if not _gui_available:
+            self._ctl_async("[FILES] Save directory change requires GUI mode.", tag="warn")
+            return
+        try:
+            initial = self.storage.base_dir or os.getcwd()
+            new_dir = filedialog.askdirectory(initialdir=initial, title="Select save directory")
+        except Exception as exc:
+            self._ctl_async(f"[FILES] Directory picker failed: {exc}", tag="error")
+            return
+        if not new_dir:
+            return
+        self._prepare_outfile(base_dir=new_dir)
+        self.save_hint.set(f"Saves to: {self.storage.output_path}")
+        self._save_current_blob(immediate=True)
+        self._ctl_async(f"[FILES] Save directory set to {self.storage.base_dir}", tag="files")
 
     # ------------------------------ COPY / DELETE ACTIONS ----------------------------
     def copy_selected(self):
@@ -2027,29 +2238,32 @@ class ScannerAppGUI:
                 for iid in self.tree.selection():
                     vals = self.tree.item(iid, "values")
                     if vals:
-                        addr, version, players, *_ = vals
-                        lines.append(f"{addr} | {version} | {players}")
+                        addr, version, players, confidence, *_ = vals
+                        lines.append(f"{addr} | {version} | {players} | {confidence}")
             if hasattr(self, "maybe_tree"):
                 for iid in self.maybe_tree.selection():
                     vals = self.maybe_tree.item(iid, "values")
                     if vals:
-                        addr, reason, *_ = vals
-                        lines.append(f"{addr} ({reason})")
+                        addr, reason, hint, *_ = vals
+                        detail = f"{addr} ({reason})"
+                        if hint:
+                            detail += f" - {hint}"
+                        lines.append(detail)
             if not lines:
-                self._ctl_log("No entries selected to copy.")
+                self._ctl_async("No entries selected to copy.", tag="warn")
                 return
             text = "\n".join(lines)
             try:
                 self.root.clipboard_clear()
                 self.root.clipboard_append(text)
             except Exception:
-                self._ctl_log("Clipboard unavailable; writing copy buffer to log.")
+                self._ctl_async("Clipboard unavailable; writing copy buffer to log.", tag="warn")
                 for line in lines:
-                    self._ctl_log(line)
+                    self._ctl_async(line, tag="info")
                 return
-            self._ctl_log(f"Copied {len(lines)} item(s) to clipboard.")
+            self._ctl_async(f"Copied {len(lines)} item(s) to clipboard.", tag="info")
         except Exception as e:
-            self._ctl_log(f"Copy failed: {e}")
+            self._ctl_async(f"Copy failed: {e}", tag="error")
 
     def delete_selected(self):
         """Delete selected entries from the right-side tables (both trees)."""
@@ -2064,32 +2278,237 @@ class ScannerAppGUI:
                     self.known_confirmed.discard(addr)
                 self.tree.delete(iid)
 
-            # From Maybe/Open-ports
-            for iid in self.maybe_tree.selection():
-                vals = self.maybe_tree.item(iid, "values")
-                addr = vals[0] if vals and len(vals) > 0 else None
-                if addr:
-                    self.maybe_list = [r for r in self.maybe_list if r.get("address") != addr]
-                    self.known_maybe.discard(addr)
-                self.maybe_tree.delete(iid)
+            # From Potential servers
+            if hasattr(self, "maybe_tree"):
+                for iid in self.maybe_tree.selection():
+                    vals = self.maybe_tree.item(iid, "values")
+                    addr = vals[0] if vals and len(vals) > 0 else None
+                    if addr:
+                        self._remove_maybe_server(addr)
 
             self._save_current_blob(immediate=True)
-            self._ctl_log("Selected entries deleted.")
+            self._ctl_async("Selected entries deleted.", tag="info")
         except Exception as e:
-            self._ctl_log(f"Delete failed: {e}")
+            self._ctl_async(f"Delete failed: {e}", tag="error")
 
     def delete_all_maybe(self):
         """Clear the entire Maybe/Open-ports table and memory list."""
         try:
-            self.maybe_list = []
-            self.known_maybe = set()
             if hasattr(self, "maybe_tree"):
-                for iid in self.maybe_tree.get_children():
-                    self.maybe_tree.delete(iid)
+                for iid in list(self.maybe_tree.get_children()):
+                    vals = self.maybe_tree.item(iid, "values")
+                    addr = vals[0] if vals and len(vals) > 0 else None
+                    if addr:
+                        self._remove_maybe_server(addr)
+            with self._maybe_lock:
+                self.maybe_list = []
+                self.known_maybe = set()
             self._save_current_blob(immediate=True)
-            self._ctl_log("All Maybe/Open-ports entries deleted.")
+            self._ctl_async("Cleared all potential server entries.", tag="maybe")
         except Exception as e:
-            self._ctl_log(f"Delete-all failed: {e}")
+            self._ctl_async(f"Delete-all failed: {e}", tag="error")
+
+    def _remove_confirmed_row_ui(self, address):
+        if not hasattr(self, "tree"):
+            return
+        for iid in self.tree.get_children():
+            vals = self.tree.item(iid, "values")
+            if vals and vals[0] == address:
+                self.tree.delete(iid)
+                break
+
+    def _remove_confirmed_server(self, address):
+        if not address:
+            return False
+        removed = False
+        for idx, rec in enumerate(list(self.servers)):
+            if rec.get("address") == address:
+                self.servers.pop(idx)
+                removed = True
+                break
+        if removed:
+            self.known_confirmed.discard(address)
+            self._run_on_ui(self._remove_confirmed_row_ui, address)
+        return removed
+
+    def _parse_address_port(self, address: str):
+        if not address:
+            return None, DEFAULT_PORT
+        if ":" in address:
+            host, port_str = address.rsplit(":", 1)
+            try:
+                port = int(port_str)
+            except Exception:
+                port = DEFAULT_PORT
+            return host.strip(), port
+        return address.strip(), DEFAULT_PORT
+
+    def recheck_selected_servers(self):
+        """Trigger a verification pass for selected server entries."""
+        selections = []
+        if hasattr(self, "tree"):
+            for iid in self.tree.selection():
+                vals = self.tree.item(iid, "values")
+                if vals:
+                    selections.append(vals[0])
+        if hasattr(self, "maybe_tree"):
+            for iid in self.maybe_tree.selection():
+                vals = self.maybe_tree.item(iid, "values")
+                if vals:
+                    selections.append(vals[0])
+        addresses = list(dict.fromkeys(addr for addr in selections if addr))
+        if not addresses:
+            self._ctl_async("Select at least one server to recheck.", tag="warn")
+            return
+        self._ctl_async(f"[RECHECK] Checking {len(addresses)} server(s)...", tag="server")
+        threading.Thread(target=self._run_recheck_batch, args=(addresses,), daemon=True).start()
+
+    def _run_recheck_batch(self, addresses):
+        refresh_confirmed = False
+        for address in addresses:
+            try:
+                result = self._recheck_single_address(address)
+                refresh_confirmed = refresh_confirmed or result.get("refresh_confirmed", False)
+            except Exception as exc:
+                self._uiq_put(("log", f"{address} - recheck error: {exc}", "red"))
+                self._ctl_async(f"[RECHECK] {address} error: {exc}", tag="error")
+        if refresh_confirmed:
+            self._run_on_ui(self.refresh_table)
+        self._save_current_blob(immediate=True)
+        self._ctl_async("[RECHECK] Completed.", tag="server")
+
+    def _recheck_single_address(self, address):
+        result = {"refresh_confirmed": False}
+        ip, port = self._parse_address_port(address)
+        if not ip:
+            return result
+        try:
+            base_timeout = max(1e-3, float(self.var_timeout.get()))
+        except Exception:
+            base_timeout = max(1e-3, float(self.var_timeout))
+        dyn_timeout = self._adaptive_timeout(base_timeout)
+        ok_ping, rtt = ping_host(ip, dyn_timeout)
+        if not ok_ping:
+            self._uiq_put(("log", f"{address} - recheck ping failed", "muted"))
+
+        if port == DEFAULT_PORT:
+            open_java, _ = check_port(ip, DEFAULT_PORT, dyn_timeout)
+            if not open_java:
+                if self._remove_confirmed_server(address):
+                    result["refresh_confirmed"] = True
+                info = self._add_maybe_server(address, reason="port-closed", hint="recheck")
+                if info["created"] or info["reason_changed"]:
+                    self._ctl_async(f"[RECHECK] {address} -> port closed", tag="maybe")
+                self._uiq_put(("log", f"{address} recheck: port 25565 closed", "orange"))
+                return result
+            ok2, info2, conf2, sources2 = _extra_fallback_probe(ip, dyn_timeout, handshake_host=self._host_override_for_scan)
+            if ok2:
+                conf_label = self._normalize_confidence(conf2, "Possible")
+                conf_lower = (conf_label or "").lower()
+                hint = (info2 or {}).get("hint") if isinstance(info2, dict) else None
+                players = info2.get("players") if isinstance(info2, dict) else None
+                maxp = info2.get("max") if isinstance(info2, dict) else None
+                version = (info2.get("version") if isinstance(info2, dict) else "-") or "-"
+                motd = ((info2.get("motd") if isinstance(info2, dict) else "") or "").replace("\n", " ")[:120]
+                pstr = f"{players}/{maxp}" if (players is not None and maxp is not None) else (str(players) if players is not None else "?")
+                rec = {
+                    "address": address,
+                    "version": version,
+                    "players": pstr,
+                    "confidence": conf_label,
+                    "motd": motd,
+                    "found_at": datetime.now().isoformat(timespec="seconds"),
+                    "ping": rtt if ok_ping else None,
+                    "bars": ping_to_bars(rtt if ok_ping else None),
+                    "hint": hint or (", ".join(sorted(sources2)) if sources2 else ""),
+                }
+                if conf_lower in {"possible", "unlikely"}:
+                    if self._remove_confirmed_server(address):
+                        result["refresh_confirmed"] = True
+                    info = self._add_maybe_server(address, reason=conf_lower, hint=rec["hint"] or "java")
+                    if info["created"] or info["reason_changed"]:
+                        self._ctl_async(f"[RECHECK] {address} -> {conf_label}", tag="maybe")
+                    self._uiq_put(("log", f"{address} recheck: confidence {conf_label}", "orange"))
+                else:
+                    existing = next((s for s in self.servers if s.get("address") == address), None)
+                    if existing:
+                        existing.update(rec)
+                    else:
+                        self.servers.append(rec)
+                        self.known_confirmed.add(address)
+                    self._remove_maybe_server(address)
+                    result["refresh_confirmed"] = True
+                    self._ctl_async(f"[RECHECK] {address} confirmed ({conf_label})", tag="server")
+                    self._uiq_put(("log", f"{address} recheck confirmed ({conf_label})", "green"))
+            else:
+                if self._remove_confirmed_server(address):
+                    result["refresh_confirmed"] = True
+                info = self._add_maybe_server(address, reason="no-response", hint="recheck")
+                if info["created"] or info["reason_changed"]:
+                    self._ctl_async(f"[RECHECK] {address} -> no protocol response", tag="maybe")
+                self._uiq_put(("log", f"{address} recheck: no Java protocol response", "orange"))
+            return result
+
+        if port == DEFAULT_BEDROCK_PORT:
+            ok_bedrock, info_b, rtt_b = bedrock_ping(ip, DEFAULT_BEDROCK_PORT, dyn_timeout)
+            if ok_bedrock and info_b:
+                conf_label = self._normalize_confidence("Possible", "Possible")
+                conf_lower = conf_label.lower()
+                players = info_b.get("players")
+                maxp = info_b.get("max")
+                pstr = f"{players}/{maxp}" if (players is not None and maxp is not None) else (str(players) if players is not None else "?")
+                version = info_b.get("version", "-") or "-"
+                motd = (info_b.get("motd") or "").replace("\n", " ")[:120]
+                rec = {
+                    "address": address,
+                    "version": version,
+                    "players": pstr,
+                    "confidence": conf_label,
+                    "motd": motd,
+                    "found_at": datetime.now().isoformat(timespec="seconds"),
+                    "ping": rtt_b,
+                    "bars": ping_to_bars(rtt_b),
+                    "hint": "Bedrock",
+                }
+                if conf_lower in {"possible", "unlikely"}:
+                    if self._remove_confirmed_server(address):
+                        result["refresh_confirmed"] = True
+                    info = self._add_maybe_server(address, reason=conf_lower, hint="bedrock")
+                    if info["created"] or info["reason_changed"]:
+                        self._ctl_async(f"[RECHECK] {address} -> {conf_label}", tag="maybe")
+                    self._uiq_put(("log", f"{address} recheck: bedrock response ({conf_label})", "blue"))
+                else:
+                    existing = next((s for s in self.servers if s.get("address") == address), None)
+                    if existing:
+                        existing.update(rec)
+                    else:
+                        self.servers.append(rec)
+                        self.known_confirmed.add(address)
+                    self._remove_maybe_server(address)
+                    result["refresh_confirmed"] = True
+                    self._ctl_async(f"[RECHECK] {address} confirmed via Bedrock", tag="server")
+                    self._uiq_put(("log", f"{address} recheck confirmed via Bedrock", "green"))
+            else:
+                if self._remove_confirmed_server(address):
+                    result["refresh_confirmed"] = True
+                info = self._add_maybe_server(address, reason="no-response", hint="bedrock-recheck")
+                if info["created"] or info["reason_changed"]:
+                    self._ctl_async(f"[RECHECK] {address} -> bedrock response missing", tag="maybe")
+                self._uiq_put(("log", f"{address} recheck: bedrock response missing", "orange"))
+            return result
+
+        open_generic, _ = check_port(ip, port, dyn_timeout)
+        if not open_generic:
+            if self._remove_confirmed_server(address):
+                result["refresh_confirmed"] = True
+            info = self._add_maybe_server(address, reason="port-closed", hint=f"port-{port}")
+            if info["created"] or info["reason_changed"]:
+                self._ctl_async(f"[RECHECK] {address} -> port {port} closed", tag="maybe")
+            self._uiq_put(("log", f"{address} recheck: port {port} closed", "orange"))
+        else:
+            self._ctl_async(f"[RECHECK] {address} port {port} open (no parser available)", tag="info")
+            self._uiq_put(("log", f"{address} recheck: port {port} open (no parser)", "blue"))
+        return result
 # ============================== SECTION 9: FILES / LOGGING / TABLE HELPERS (END) ===============================
 
 # ============================== SECTION 10: APP LAUNCH / ENTRYPOINT (START) ===================================
