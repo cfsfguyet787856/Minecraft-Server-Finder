@@ -640,7 +640,12 @@ class ScannerAppGUI:
         self._info_label_style = "Info.TLabel"
         self._danger_label_style = "Danger.TLabel"
         self._value_label_style = "Value.TLabel"
+        self._section_frame_style = "Section.TFrame"
+        self._section_header_style = "SectionHeader.TFrame"
+        self._section_label_style = "SectionHeader.TLabel"
+        self._section_toggle_style = "SectionToggle.TButton"
         self._style = None
+        self._collapsible_sections = []
 
         self._prepare_outfile()
         self._init_theme()
@@ -651,6 +656,76 @@ class ScannerAppGUI:
 
     # ----------------------------------------------------------------------
 
+    def _create_collapsible_section(self, parent, title: str, *, start_open: bool = True):
+        """
+        Create a collapsible section with a clickable header and content frame.
+        Returns the outer container and the inner content frame.
+        """
+        outer = ttk.Frame(parent, style=self._section_frame_style)
+        outer.columnconfigure(0, weight=1)
+        outer.rowconfigure(1, weight=1)
+
+        header = ttk.Frame(outer, style=self._section_header_style, padding=(6, 4, 6, 4))
+        header.grid(row=0, column=0, sticky="ew")
+        header.columnconfigure(1, weight=1)
+
+        body = ttk.Frame(outer, padding=(8, 6, 8, 10))
+        body.grid(row=1, column=0, sticky="nsew")
+
+        section = {
+            "title": title,
+            "outer": outer,
+            "header": header,
+            "body": body,
+            "expanded": bool(start_open),
+        }
+
+        def _toggle(_event=None):
+            self._set_collapsible_state(section, not section["expanded"])
+
+        toggle_btn = ttk.Button(
+            header,
+            width=2,
+            text="-" if start_open else "+",
+            style=self._section_toggle_style,
+            command=_toggle,
+        )
+        toggle_btn.grid(row=0, column=0, padx=(0, 6))
+        section["toggle"] = toggle_btn
+
+        label = ttk.Label(header, text=title, style=self._section_label_style)
+        label.grid(row=0, column=1, sticky="w")
+        section["label"] = label
+
+        # Make the full header clickable.
+        header.bind("<Button-1>", _toggle)
+        label.bind("<Button-1>", _toggle)
+
+        self._collapsible_sections.append(section)
+        self._set_collapsible_state(section, start_open)
+
+        return outer, body
+
+    def _set_collapsible_state(self, section: dict, expanded: bool):
+        body = section.get("body")
+        toggle = section.get("toggle")
+        section["expanded"] = bool(expanded)
+        try:
+            if body:
+                if expanded:
+                    body.grid()
+                else:
+                    body.grid_remove()
+        except Exception:
+            pass
+        try:
+            if toggle:
+                toggle.configure(text="-" if expanded else "+")
+        except Exception:
+            pass
+
+    # ----------------------------------------------------------------------
+
     def _build_ui(self):
         container = ttk.Frame(self.root, padding=(8, 8, 8, 12))
         container.pack(fill="both", expand=True)
@@ -658,8 +733,8 @@ class ScannerAppGUI:
 
         self._threads_display = tk.StringVar(value=f"{self.current_concurrency} (active 0)")
 
-        settings = ttk.LabelFrame(container, text="Scan Settings")
-        settings.pack(fill="x", padx=4, pady=(0, 6))
+        settings_section, settings = self._create_collapsible_section(container, "Scan Settings")
+        settings_section.pack(fill="x", padx=4, pady=(0, 6))
         for col in (1, 3, 5, 7):
             settings.columnconfigure(col, weight=1)
 
@@ -679,8 +754,8 @@ class ScannerAppGUI:
         ttk.Label(settings, text="Max delay (ms)").grid(row=1, column=4, sticky="w", padx=(0, 4), pady=4)
         ttk.Entry(settings, textvariable=self.var_scan_delay_max, width=8).grid(row=1, column=5, sticky="w", padx=(0, 12), pady=4)
 
-        options = ttk.LabelFrame(container, text="Scan Options")
-        options.pack(fill="x", padx=4, pady=(0, 6))
+        options_section, options = self._create_collapsible_section(container, "Scan Options")
+        options_section.pack(fill="x", padx=4, pady=(0, 6))
         for idx in range(4):
             options.columnconfigure(idx, weight=1)
 
@@ -695,8 +770,8 @@ class ScannerAppGUI:
             command=self._on_adaptive_delay_toggle
         ).grid(row=1, column=0, sticky="w", padx=8, pady=2)
 
-        tools = ttk.LabelFrame(container, text="Verification & Tools")
-        tools.pack(fill="x", padx=4, pady=(0, 6))
+        tools_section, tools = self._create_collapsible_section(container, "Verification & Tools")
+        tools_section.pack(fill="x", padx=4, pady=(0, 6))
         tools.columnconfigure(1, weight=1)
         tools.columnconfigure(3, weight=1)
 
@@ -714,8 +789,8 @@ class ScannerAppGUI:
         ttk.Entry(tools, textvariable=self.var_test_host).grid(row=1, column=3, sticky="ew", padx=(0, 12), pady=4)
         ttk.Button(tools, text="Run Test", command=self.run_direct_test).grid(row=1, column=4, sticky="w", padx=(0, 8), pady=4)
 
-        proxy_frame = ttk.LabelFrame(container, text="Proxy Pool")
-        proxy_frame.pack(fill="x", padx=4, pady=(0, 6))
+        proxy_section, proxy_frame = self._create_collapsible_section(container, "Proxy Pool")
+        proxy_section.pack(fill="x", padx=4, pady=(0, 6))
         proxy_frame.columnconfigure(0, weight=1)
         proxy_frame.columnconfigure(1, weight=0)
         proxy_frame.rowconfigure(1, weight=1)
@@ -779,27 +854,29 @@ class ScannerAppGUI:
         self.btn_change_save.pack(side="right", padx=(0, 6))
         self.btn_clear_logs.pack(side="right")
 
-        vpn_frame = ttk.LabelFrame(container, text="VPN Control")
-        vpn_frame.pack(fill="x", padx=4, pady=(0, 6))
+        vpn_section, vpn_frame = self._create_collapsible_section(container, "VPN Control")
+        vpn_section.pack(fill="x", padx=4, pady=(0, 6))
+        vpn_controls = ttk.Frame(vpn_frame)
+        vpn_controls.pack(fill="x", padx=8, pady=(4, 0))
         self.chk_mullvad = ttk.Checkbutton(
-            vpn_frame,
+            vpn_controls,
             text="Cycle Mullvad every 120s during scans",
             variable=self.var_mullvad_cycle,
             command=self._on_mullvad_toggle
         )
-        self.chk_mullvad.pack(side="left", padx=8, pady=4)
-        self.btn_mullvad_now = ttk.Button(vpn_frame, text="Run Mullvad Cycle Now", width=22, command=self.run_mullvad_cycle_now)
+        self.chk_mullvad.pack(side="left", padx=0, pady=4)
+        self.btn_mullvad_now = ttk.Button(vpn_controls, text="Run Mullvad Cycle Now", width=22, command=self.run_mullvad_cycle_now)
         self.btn_mullvad_now.pack(side="left", padx=(6, 0), pady=4)
-        ttk.Label(vpn_frame, text="Cycle after", style=self._muted_label_style).pack(side="left", padx=(8, 0), pady=4)
-        self.ent_mullvad_cycle_scans = ttk.Entry(vpn_frame, width=7, textvariable=self.var_vpn_cycle_scans, justify="center")
+        ttk.Label(vpn_controls, text="Cycle after", style=self._muted_label_style).pack(side="left", padx=(8, 0), pady=4)
+        self.ent_mullvad_cycle_scans = ttk.Entry(vpn_controls, width=7, textvariable=self.var_vpn_cycle_scans, justify="center")
         self.ent_mullvad_cycle_scans.pack(side="left", padx=(2, 0), pady=4)
-        ttk.Label(vpn_frame, text="scans", style=self._muted_label_style).pack(side="left", padx=(2, 0), pady=4)
+        ttk.Label(vpn_controls, text="scans", style=self._muted_label_style).pack(side="left", padx=(2, 0), pady=4)
         mullvad_hint = "Mullvad CLI ready" if self.vpn_manager.cli_path else "Mullvad CLI missing"
-        self.lbl_mullvad_status = ttk.Label(vpn_frame, text=mullvad_hint, style=self._muted_label_style)
+        self.lbl_mullvad_status = ttk.Label(vpn_controls, text=mullvad_hint, style=self._muted_label_style)
         self.lbl_mullvad_status.pack(side="right", padx=8, pady=4)
 
-        stats = ttk.LabelFrame(container, text="Quick Stats")
-        stats.pack(fill="x", padx=4, pady=(0, 6))
+        stats_section, stats = self._create_collapsible_section(container, "Quick Stats")
+        stats_section.pack(fill="x", padx=4, pady=(0, 6))
         stat_items = [
             ("Replied", self.var_icmp, self._success_label_style),
             ("Port open", self.var_port, self._warn_label_style),
@@ -813,8 +890,8 @@ class ScannerAppGUI:
             ttk.Label(stats, text=f"{title}:").grid(row=0, column=idx * 2, sticky="w", padx=(8, 2), pady=4)
             ttk.Label(stats, textvariable=var, style=style).grid(row=0, column=idx * 2 + 1, sticky="w", padx=(0, 12), pady=4)
 
-        perf = ttk.LabelFrame(container, text="Performance")
-        perf.pack(fill="x", padx=4, pady=(0, 6))
+        perf_section, perf = self._create_collapsible_section(container, "Performance")
+        perf_section.pack(fill="x", padx=4, pady=(0, 6))
         for col in range(3):
             perf.columnconfigure(col, weight=1)
         perf_vars = [self.s_elapsed, self.s_eta, self.s_ips, self.s_rps, self.s_fpm, self.s_avgping, self.s_hit, self.s_cpu, self.s_ram]
@@ -822,32 +899,41 @@ class ScannerAppGUI:
             row, col = divmod(idx, 3)
             ttk.Label(perf, textvariable=var).grid(row=row, column=col, sticky="w", padx=8, pady=4)
 
-        content = ttk.Frame(container)
-        content.pack(fill="both", expand=True, padx=4, pady=(0, 8))
-        content.columnconfigure(0, weight=1)
-        content.columnconfigure(1, weight=1)
+        results_section, results = self._create_collapsible_section(container, "Results & Logs")
+        results_section.pack(fill="both", expand=True, padx=4, pady=(0, 8))
+        results.columnconfigure(0, weight=1)
+        results.columnconfigure(1, weight=1)
+        results.rowconfigure(0, weight=1)
 
-        left = ttk.Frame(content)
+        left = ttk.Frame(results)
         left.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        left.columnconfigure(0, weight=1)
+        left.rowconfigure(0, weight=2)
         left.rowconfigure(1, weight=1)
-        left.rowconfigure(3, weight=1)
 
-        ttk.Label(left, text="Log").grid(row=0, column=0, sticky="w", pady=(0, 4))
-        self.log = scrolledtext.ScrolledText(left, state="disabled", height=14, font=("Consolas", 9), relief="flat", borderwidth=0)
-        self.log.grid(row=1, column=0, sticky="nsew")
+        log_section, log_frame = self._create_collapsible_section(left, "Log")
+        log_section.grid(row=0, column=0, sticky="nsew")
+        log_frame.columnconfigure(0, weight=1)
+        log_frame.rowconfigure(0, weight=1)
+        self.log = scrolledtext.ScrolledText(log_frame, state="disabled", height=14, font=("Consolas", 9), relief="flat", borderwidth=0)
+        self.log.grid(row=0, column=0, sticky="nsew")
 
-        ttk.Label(left, text="Control Log").grid(row=2, column=0, sticky="w", pady=(8, 4))
-        self.ctl = scrolledtext.ScrolledText(left, state="disabled", height=6, font=("Consolas", 9), relief="flat", borderwidth=0)
-        self.ctl.grid(row=3, column=0, sticky="nsew")
+        ctl_section, ctl_frame = self._create_collapsible_section(left, "Control Log")
+        ctl_section.grid(row=1, column=0, sticky="nsew", pady=(8, 0))
+        ctl_frame.columnconfigure(0, weight=1)
+        ctl_frame.rowconfigure(0, weight=1)
+        self.ctl = scrolledtext.ScrolledText(ctl_frame, state="disabled", height=6, font=("Consolas", 9), relief="flat", borderwidth=0)
+        self.ctl.grid(row=0, column=0, sticky="nsew")
 
-        right = ttk.Frame(content)
+        right = ttk.Frame(results)
         right.grid(row=0, column=1, sticky="nsew")
+        right.columnconfigure(0, weight=1)
         right.rowconfigure(0, weight=1)
         right.rowconfigure(1, weight=1)
 
         columns = ("address", "version", "players", "confidence", "motd", "found", "ping", "bars", "hint")
-        servers_frame = ttk.LabelFrame(right, text="Confirmed Minecraft Servers")
-        servers_frame.grid(row=0, column=0, sticky="nsew")
+        servers_section, servers_frame = self._create_collapsible_section(right, "Confirmed Minecraft Servers")
+        servers_section.grid(row=0, column=0, sticky="nsew")
         servers_frame.columnconfigure(0, weight=1)
         servers_frame.rowconfigure(0, weight=1)
         self.tree = ttk.Treeview(servers_frame, columns=columns, show="headings", selectmode="extended")
@@ -870,8 +956,8 @@ class ScannerAppGUI:
         tree_scroll_y.grid(row=0, column=1, sticky="ns")
 
         mcols = ("address", "reason", "hint", "seen", "last_try")
-        maybe_frame = ttk.LabelFrame(right, text="Potential Servers")
-        maybe_frame.grid(row=1, column=0, sticky="nsew", pady=(8, 0))
+        maybe_section, maybe_frame = self._create_collapsible_section(right, "Potential Servers")
+        maybe_section.grid(row=1, column=0, sticky="nsew", pady=(8, 0))
         maybe_frame.columnconfigure(0, weight=1)
         maybe_frame.rowconfigure(0, weight=1)
         self.maybe_tree = ttk.Treeview(maybe_frame, columns=mcols, show="headings", selectmode="extended", height=6)
@@ -1074,6 +1160,24 @@ class ScannerAppGUI:
                   background=[("active", palette["button_active"]), ("pressed", palette["accent"])],
                   foreground=[("active", palette["select_fg"]), ("pressed", palette["select_fg"])])
 
+        try:
+            style.configure(self._section_frame_style,
+                            background=palette["bg"],
+                            borderwidth=1,
+                            relief="solid",
+                            bordercolor=palette["border"])
+        except Exception:
+            style.configure(self._section_frame_style, background=palette["bg"])
+        style.configure(self._section_header_style, background=palette["bg_alt"])
+        style.configure(self._section_label_style, background=palette["bg_alt"], foreground=palette["accent"])
+        style.configure(self._section_toggle_style,
+                        background=palette["button_bg"],
+                        foreground=palette["button_fg"],
+                        bordercolor=palette["border"])
+        style.map(self._section_toggle_style,
+                  background=[("active", palette["button_active"]), ("pressed", palette["accent"])],
+                  foreground=[("active", palette["select_fg"]), ("pressed", palette["select_fg"])])
+
         style.configure(self._tree_style,
                         background=palette["bg_alt"],
                         fieldbackground=palette["bg_alt"],
@@ -1090,6 +1194,32 @@ class ScannerAppGUI:
         style.map(f"{self._tree_style}.Heading",
                   background=[("active", palette["accent"])],
                   foreground=[("active", palette["select_fg"])])
+
+        for section in getattr(self, "_collapsible_sections", []):
+            header = section.get("header")
+            outer = section.get("outer")
+            label = section.get("label")
+            toggle = section.get("toggle")
+            try:
+                if header:
+                    header.configure(style=self._section_header_style)
+            except Exception:
+                pass
+            try:
+                if outer:
+                    outer.configure(style=self._section_frame_style)
+            except Exception:
+                pass
+            try:
+                if label:
+                    label.configure(style=self._section_label_style)
+            except Exception:
+                pass
+            try:
+                if toggle:
+                    toggle.configure(style=self._section_toggle_style)
+            except Exception:
+                pass
 
         if hasattr(self, "tree"):
             try:
