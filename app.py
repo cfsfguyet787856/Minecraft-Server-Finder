@@ -643,7 +643,6 @@ class ScannerAppGUI:
         self._section_frame_style = "Section.TFrame"
         self._section_header_style = "SectionHeader.TFrame"
         self._section_label_style = "SectionHeader.TLabel"
-        self._section_toggle_style = "SectionToggle.TButton"
         self._style = None
         self._collapsible_sections = []
 
@@ -658,7 +657,7 @@ class ScannerAppGUI:
 
     def _create_collapsible_section(self, parent, title: str, *, start_open: bool = True):
         """
-        Create a collapsible section with a clickable header and content frame.
+        Create a section container with a static header and content frame.
         Returns the outer container and the inner content frame.
         """
         outer = ttk.Frame(parent, style=self._section_frame_style)
@@ -667,7 +666,10 @@ class ScannerAppGUI:
 
         header = ttk.Frame(outer, style=self._section_header_style, padding=(6, 4, 6, 4))
         header.grid(row=0, column=0, sticky="ew")
-        header.columnconfigure(1, weight=1)
+        header.columnconfigure(0, weight=1)
+
+        label = ttk.Label(header, text=title, style=self._section_label_style)
+        label.grid(row=0, column=0, sticky="w")
 
         body = ttk.Frame(outer, padding=(8, 6, 8, 10))
         body.grid(row=1, column=0, sticky="nsew")
@@ -677,52 +679,10 @@ class ScannerAppGUI:
             "outer": outer,
             "header": header,
             "body": body,
-            "expanded": bool(start_open),
+            "label": label,
         }
-
-        def _toggle(_event=None):
-            self._set_collapsible_state(section, not section["expanded"])
-
-        toggle_btn = ttk.Button(
-            header,
-            width=2,
-            text="-" if start_open else "+",
-            style=self._section_toggle_style,
-            command=_toggle,
-        )
-        toggle_btn.grid(row=0, column=0, padx=(0, 6))
-        section["toggle"] = toggle_btn
-
-        label = ttk.Label(header, text=title, style=self._section_label_style)
-        label.grid(row=0, column=1, sticky="w")
-        section["label"] = label
-
-        # Make the full header clickable.
-        header.bind("<Button-1>", _toggle)
-        label.bind("<Button-1>", _toggle)
-
         self._collapsible_sections.append(section)
-        self._set_collapsible_state(section, start_open)
-
         return outer, body
-
-    def _set_collapsible_state(self, section: dict, expanded: bool):
-        body = section.get("body")
-        toggle = section.get("toggle")
-        section["expanded"] = bool(expanded)
-        try:
-            if body:
-                if expanded:
-                    body.grid()
-                else:
-                    body.grid_remove()
-        except Exception:
-            pass
-        try:
-            if toggle:
-                toggle.configure(text="-" if expanded else "+")
-        except Exception:
-            pass
 
     # ----------------------------------------------------------------------
 
@@ -825,9 +785,10 @@ class ScannerAppGUI:
         ttk.Button(tools, text="Run Test", command=self.run_direct_test).grid(row=1, column=4, sticky="w", padx=(0, 8), pady=4)
 
         quick_and_perf = ttk.Frame(scan_body)
-        quick_and_perf.pack(fill="x", padx=4, pady=(0, 6))
+        quick_and_perf.pack(fill="both", expand=True, padx=4, pady=(0, 6))
         quick_and_perf.columnconfigure(0, weight=1)
         quick_and_perf.columnconfigure(1, weight=1)
+        quick_and_perf.rowconfigure(1, weight=1)
 
         stats_section, stats = self._create_collapsible_section(quick_and_perf, "Quick Stats")
         stats_section.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
@@ -853,6 +814,20 @@ class ScannerAppGUI:
             row, col = divmod(idx, 3)
             ttk.Label(perf, textvariable=var).grid(row=row, column=col, sticky="w", padx=8, pady=4)
 
+        quick_log_section, quick_log_frame = self._create_collapsible_section(quick_and_perf, "Live Log")
+        quick_log_section.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
+        quick_log_frame.columnconfigure(0, weight=1)
+        quick_log_frame.rowconfigure(0, weight=1)
+        self.quick_log = scrolledtext.ScrolledText(
+            quick_log_frame,
+            state="disabled",
+            height=8,
+            font=("Consolas", 9),
+            relief="flat",
+            borderwidth=0,
+        )
+        self.quick_log.grid(row=0, column=0, sticky="nsew")
+
         network_body = ttk.Frame(network_tab)
         network_body.pack(fill="both", expand=True)
         network_body.columnconfigure(0, weight=1)
@@ -862,6 +837,7 @@ class ScannerAppGUI:
         proxy_frame.columnconfigure(0, weight=1)
         proxy_frame.columnconfigure(1, weight=0)
         proxy_frame.rowconfigure(1, weight=1)
+        proxy_frame.rowconfigure(3, weight=1)
         proxy_header = ttk.Frame(proxy_frame)
         proxy_header.grid(row=0, column=0, columnspan=2, sticky="ew", padx=8, pady=(6, 2))
         proxy_header.columnconfigure(0, weight=1)
@@ -877,7 +853,7 @@ class ScannerAppGUI:
         )
         self.btn_toggle_proxy.grid(row=0, column=2, sticky="e")
         proxy_columns = ("proxy", "status", "latency", "ok", "pfail", "tfail")
-        self.proxy_tree = ttk.Treeview(proxy_frame, columns=proxy_columns, show="headings", height=5)
+        self.proxy_tree = ttk.Treeview(proxy_frame, columns=proxy_columns, show="headings", height=9)
         for col, title, width, anchor in [
             ("proxy", "Proxy", 160, "w"),
             ("status", "Status", 130, "w"),
@@ -895,18 +871,18 @@ class ScannerAppGUI:
             )
         proxy_scroll = ttk.Scrollbar(proxy_frame, orient="vertical", command=self.proxy_tree.yview)
         self.proxy_tree.configure(yscrollcommand=proxy_scroll.set)
-        self.proxy_tree.grid(row=1, column=0, sticky="ew", padx=(8, 0), pady=(0, 4))
+        self.proxy_tree.grid(row=1, column=0, sticky="nsew", padx=(8, 0), pady=(0, 4))
         proxy_scroll.grid(row=1, column=1, sticky="ns", padx=(0, 8), pady=(0, 4))
         ttk.Label(proxy_frame, text="Proxy Log").grid(row=2, column=0, sticky="w", padx=8, pady=(6, 2))
         self.proxy_log = scrolledtext.ScrolledText(
             proxy_frame,
-            height=5,
+            height=8,
             state="disabled",
             font=("Consolas", 9),
             relief="flat",
             borderwidth=0,
         )
-        self.proxy_log.grid(row=3, column=0, columnspan=2, sticky="ew", padx=8, pady=(0, 6))
+        self.proxy_log.grid(row=3, column=0, columnspan=2, sticky="nsew", padx=8, pady=(0, 6))
 
         vpn_section, vpn_frame = self._create_collapsible_section(network_body, "VPN Control")
         vpn_section.pack(fill="x", padx=4, pady=(0, 6))
@@ -1245,13 +1221,6 @@ class ScannerAppGUI:
             style.configure(self._section_frame_style, background=palette["bg"])
         style.configure(self._section_header_style, background=palette["bg_alt"])
         style.configure(self._section_label_style, background=palette["bg_alt"], foreground=palette["accent"])
-        style.configure(self._section_toggle_style,
-                        background=palette["button_bg"],
-                        foreground=palette["button_fg"],
-                        bordercolor=palette["border"])
-        style.map(self._section_toggle_style,
-                  background=[("active", palette["button_active"]), ("pressed", palette["accent"])],
-                  foreground=[("active", palette["select_fg"]), ("pressed", palette["select_fg"])])
 
         style.configure(self._tree_style,
                         background=palette["bg_alt"],
@@ -1274,7 +1243,6 @@ class ScannerAppGUI:
             header = section.get("header")
             outer = section.get("outer")
             label = section.get("label")
-            toggle = section.get("toggle")
             try:
                 if header:
                     header.configure(style=self._section_header_style)
@@ -1288,11 +1256,6 @@ class ScannerAppGUI:
             try:
                 if label:
                     label.configure(style=self._section_label_style)
-            except Exception:
-                pass
-            try:
-                if toggle:
-                    toggle.configure(style=self._section_toggle_style)
             except Exception:
                 pass
 
@@ -1321,6 +1284,20 @@ class ScannerAppGUI:
                 self.log.tag_config("red", foreground=palette["danger"])
                 self.log.tag_config("info", foreground=palette["muted"])
                 self.log.tag_config("muted", foreground=palette["muted"])
+            except Exception:
+                pass
+        if hasattr(self, "quick_log"):
+            try:
+                self.quick_log.configure(bg=palette["bg_alt"], fg=palette["fg"], insertbackground=palette["fg"], highlightthickness=0, borderwidth=0)
+                for tag, colour in [
+                    ("green", palette["success"]),
+                    ("orange", palette["warn"]),
+                    ("blue", palette["info"]),
+                    ("red", palette["danger"]),
+                    ("info", palette["muted"]),
+                    ("muted", palette["muted"]),
+                ]:
+                    self.quick_log.tag_config(tag, foreground=colour)
             except Exception:
                 pass
         if hasattr(self, "proxy_log"):
@@ -1896,6 +1873,7 @@ class ScannerAppGUI:
             dyn_timeout = self._adaptive_timeout(max(1e-3, base_t))
 
             connector = lease.connector if lease else _direct_connector
+            active_connector = connector
 
             ok_ping, rtt = ping_host(ip, dyn_timeout)
             self.ping_attempts += 1
@@ -1916,9 +1894,50 @@ class ScannerAppGUI:
                     return
 
             # Ports (log concise open/closed only)
-            open_java, _ = check_port(ip, DEFAULT_PORT, dyn_timeout, connector=connector)
-            ok_bedrock, info_b, rtt_b = bedrock_ping(ip, DEFAULT_BEDROCK_PORT, dyn_timeout)
+            open_java = False
+            java_rtt = None
+            attempts = 0
+            while attempts < 3:
+                try:
+                    open_java, java_rtt = check_port(ip, DEFAULT_PORT, dyn_timeout, connector=active_connector)
+                    break
+                except ProxyTargetError as exc:
+                    self._uiq_put(("proxy-log", f"[PROXY] Target refused via proxy for {ip}: {exc}", "warn"))
+                    open_java = False
+                    break
+                except ProxyHandshakeError as exc:
+                    attempts += 1
+                    label = getattr(lease, "label", "direct")
+                    self._uiq_put(("proxy-log", f"[PROXY] {label} handshake failed for {ip}: {exc}", "error"))
+                    if active_connector is _direct_connector or not (self.proxy_pool and self._proxy_enabled):
+                        self._uiq_put(("log", f"{ip} - proxy handshake failed, skipping", "orange"))
+                        self._auto_limit_evaluate()
+                        return
+                    if lease:
+                        try:
+                            lease.close()
+                        except Exception:
+                            pass
+                        lease = None
+                    try:
+                        lease = self.proxy_pool.acquire(timeout=1.5)
+                        active_connector = lease.connector
+                        self._uiq_put(("proxy-log", f"[PROXY] Swapped to {lease.label} after failure on {ip}", "info"))
+                    except ProxyAcquireTimeout:
+                        active_connector = _direct_connector
+                        self._uiq_put(("proxy-log", f"[PROXY] Falling back to direct connection for {ip}", "warn"))
+            else:
+                open_java = False
 
+            connector = active_connector
+            if connector is _direct_connector and lease:
+                try:
+                    lease.close()
+                except Exception:
+                    pass
+                lease = None
+
+            ok_bedrock, info_b, rtt_b = bedrock_ping(ip, DEFAULT_BEDROCK_PORT, dyn_timeout)
             if open_java and ok_bedrock:
                 self._uiq_put(("log", f"{ip} - ports open: 25565 & 19132", "blue"))
                 self._ctl_async(f"[PORT] {ip} open on 25565 & 19132")
@@ -1933,6 +1952,8 @@ class ScannerAppGUI:
                 return
 
             # Java details via mcstatus primary (with fallbacks inside helper)
+            if self._stop.is_set():
+                return
             if open_java:
                 self.var_port.set(self.var_port.get() + 1)
                 self.open_ports.add(ip)
@@ -1994,6 +2015,9 @@ class ScannerAppGUI:
                         self._ctl_async(f"[MAYBE] {addr} open but no protocol response", tag="maybe")
                     self._uiq_put(("log", f"{addr} open but no reliable Minecraft signature detected.", "orange"))
 
+            if self._stop.is_set():
+                return
+
             if ok_bedrock and info_b:
                 addr_b = f"{ip}:{DEFAULT_BEDROCK_PORT}"
                 conf_b = self._normalize_confidence("Possible", "Possible")
@@ -2043,7 +2067,8 @@ class ScannerAppGUI:
                 if info["created"] or info["reason_changed"]:
                     self._ctl_async(f"[MAYBE] {addr_b} recorded (bedrock port)", tag="maybe")
 
-            self._auto_limit_evaluate()
+            if not self._stop.is_set():
+                self._auto_limit_evaluate()
         except Exception as exc:
             self._uiq_put(("log", f"{ip} - worker error: {exc}", "red"))
             self._ctl_async(f"[ERROR] Worker failure on {ip}: {exc}")
@@ -2053,10 +2078,6 @@ class ScannerAppGUI:
 # ============================== SECTION 7: AUTO LIMIT / WORKER (END) ================================
 
 # ============================== SECTION 8: GUI HELPERS / STATS / TICK (START) ==============================
-    def _update_settings_display(self):
-        # (Settings panel was removed; keep a no-op for compatibility)
-        pass
-
     def run_direct_test(self):
         """Triggered by the 'Run Test' button in the GUI."""
         target = self.var_test_host.get().strip()
@@ -2177,6 +2198,21 @@ class ScannerAppGUI:
                     self.log.insert("end", msg + "\n", tag)
                     self.log.configure(state="disabled")
                     self.log.see("end")
+                    if hasattr(self, "quick_log"):
+                        self.quick_log.configure(state="normal")
+                        self.quick_log.insert("end", msg + "\n", tag)
+                        try:
+                            line_count = int(self.quick_log.index("end-1c").split(".")[0])
+                        except Exception:
+                            line_count = 0
+                        if line_count > 400:
+                            start_line = max(1, line_count - 300)
+                            try:
+                                self.quick_log.delete("1.0", f"{start_line}.0")
+                            except Exception:
+                                pass
+                        self.quick_log.configure(state="disabled")
+                        self.quick_log.see("end")
                 except Exception:
                     print(msg)
         except Exception:
@@ -2402,6 +2438,20 @@ class ScannerAppGUI:
             latency = event.get("latency_ms")
             if latency is not None:
                 self.var_proxy_health_hint.set(f"{label} success {latency:.1f} ms")
+        elif kind == "proxy-quarantine":
+            duration = float(event.get("duration") or 0.0)
+            consecutive = event.get("consecutive")
+            extra = f" after {consecutive} failures" if consecutive is not None else ""
+            self._proxy_log(f"[PROXY] {label} quarantined for {duration:.1f}s{extra}", "warn")
+            self.var_proxy_health_hint.set(f"{label} quarantine {duration:.0f}s")
+        elif kind == "proxy-disabled":
+            duration = float(event.get("duration") or 0.0)
+            reason = event.get("reason") or "cool-off"
+            self._proxy_log(f"[PROXY] {label} disabled for {duration:.0f}s ({reason})", "error")
+            self.var_proxy_health_hint.set(f"{label} disabled {duration:.0f}s")
+        elif kind == "proxy-restored":
+            self._proxy_log(f"[PROXY] {label} restored to pool", "success")
+            self.var_proxy_health_hint.set(f"{label} restored")
         elif kind == "release":
             cooldown = float(event.get("cooldown") or 0.0)
             self.var_proxy_health_hint.set(f"{label} released ({cooldown:.1f}s cooldown)")
@@ -2421,9 +2471,32 @@ class ScannerAppGUI:
         self._proxy_snapshot = snapshot
         total = len(snapshot)
         in_use = sum(1 for item in snapshot if item.get("in_use"))
-        cooling = sum(1 for item in snapshot if not item.get("in_use") and (item.get("cooldown") or 0) > 0.05)
-        available = total - in_use
-        summary = f"Proxies loaded: {total} | in use {in_use} | cooling {cooling} | idle {max(0, available - cooling)}"
+        disabled_count = sum(1 for item in snapshot if (item.get("disabled") or 0) > 0.05)
+        quarantine_count = sum(
+            1
+            for item in snapshot
+            if (item.get("quarantine") or 0) > 0.05 and (item.get("disabled") or 0) <= 0.05
+        )
+        cooling = sum(
+            1
+            for item in snapshot
+            if (
+                not item.get("in_use")
+                and (item.get("cooldown") or 0) > 0.05
+                and (item.get("quarantine") or 0) <= 0.05
+                and (item.get("disabled") or 0) <= 0.05
+            )
+        )
+        idle = max(0, total - in_use - cooling - quarantine_count - disabled_count)
+        summary_parts = [f"Proxies {total}", f"in use {in_use}"]
+        if disabled_count:
+            summary_parts.append(f"disabled {disabled_count}")
+        if quarantine_count:
+            summary_parts.append(f"quarantine {quarantine_count}")
+        if cooling:
+            summary_parts.append(f"cooling {cooling}")
+        summary_parts.append(f"idle {idle}")
+        summary = " | ".join(summary_parts)
         if not self._proxy_enabled:
             summary += " (disabled)"
         self.var_proxy_summary.set(summary)
@@ -2433,16 +2506,29 @@ class ScannerAppGUI:
         for entry in snapshot:
             label = entry.get("label", "?")
             cooldown = float(entry.get("cooldown") or 0.0)
+            quarantine = float(entry.get("quarantine") or 0.0)
+            disabled = float(entry.get("disabled") or 0.0)
+            disabled_reason = entry.get("disabled_reason")
             in_use_flag = bool(entry.get("in_use"))
             if in_use_flag:
                 status = "In use"
+            elif disabled > 0.05:
+                reason_hint = ""
+                if disabled_reason:
+                    hint = str(disabled_reason)
+                    if len(hint) > 28:
+                        hint = hint[:27] + "…"
+                    reason_hint = f" ({hint})"
+                status = f"Disabled {disabled:.0f}s{reason_hint}"
+            elif quarantine > 0.05:
+                status = f"Quarantine {quarantine:.1f}s"
             elif cooldown > 0.05:
                 status = f"Cooling {cooldown:.1f}s"
             else:
                 status = "Idle"
             last_stage = entry.get("last_stage")
             last_error = entry.get("last_error")
-            if last_error:
+            if last_error and not in_use_flag:
                 status = f"{status} ({last_stage or 'error'})"
             latency = entry.get("last_latency_ms")
             latency_str = f"{latency:.1f}" if latency is not None else "-"
@@ -2748,6 +2834,13 @@ class ScannerAppGUI:
             self.log.configure(state="disabled")
         except Exception:
             pass
+        if hasattr(self, "quick_log"):
+            try:
+                self.quick_log.configure(state="normal")
+                self.quick_log.delete("1.0", "end")
+                self.quick_log.configure(state="disabled")
+            except Exception:
+                pass
 
     def _log(self, msg, tag="info"):
         """High-volume log to main log (thin)."""

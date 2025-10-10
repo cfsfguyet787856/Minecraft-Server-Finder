@@ -7,9 +7,16 @@ import itertools
 import socket
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable, Iterator, List, Optional, Sequence, Tuple
+
+# Tunables for proxy backoff behaviour
+FAIL_QUARANTINE_THRESHOLD = 3
+FAIL_DISABLE_THRESHOLD = 6
+BASE_QUARANTINE_SECONDS = 5.0
+MAX_QUARANTINE_SECONDS = 180.0
+HARD_DISABLE_SECONDS = 300.0
 
 
 class ProxyError(Exception):
@@ -48,6 +55,11 @@ class ProxyStats:
     assigned_at: float = 0.0
     cooldown_until: float = 0.0
     total_sessions: int = 0
+    last_success_ts: float = 0.0
+    last_failure_ts: float = 0.0
+    quarantine_until: float = 0.0
+    disabled_until: float = 0.0
+    disabled_reason: Optional[str] = None
 
     @property
     def label(self) -> str:
@@ -164,12 +176,22 @@ class ProxyPool:
             return sum(1 for available, _, stats in self._heap if available <= now and not stats.in_use)
 
     def prepare_for_run(self) -> None:
-        with self._lock:
+        with self._cv:
+            self._heap.clear()
+            with self._lock:
+                for stats in self._stats:
+                    stats.consecutive_proxy_failures = 0
+                    stats.last_error = None
+                    stats.last_stage = None
+                    stats.last_latency_ms = None
+                    stats.last_success_ts = 0.0
+                    stats.quarantine_until = 0.0
+                    stats.disabled_until = 0.0
+                    stats.disabled_reason = None
+                    stats.cooldown_until = 0.0
+                    stats.in_use = False
             for stats in self._stats:
-                stats.consecutive_proxy_failures = 0
-                stats.last_error = None
-                stats.last_stage = None
-                stats.last_latency_ms = None
+                self._push(stats, available_at=0.0)
 
     # ------------------------------------------------------------------ #
     # Acquisition and release
@@ -183,23 +205,29 @@ class ProxyPool:
                 now = time.time()
                 if self._heap:
                     available_at, _, stats = heapq.heappop(self._heap)
-                    if available_at > now:
-                        heapq.heappush(self._heap, (available_at, next(self._counter), stats))
-                        wait_for = available_at - now
+                    effective_at = max(available_at, stats.quarantine_until, stats.disabled_until)
+                    if stats.in_use and effective_at <= now:
+                        effective_at = now + 0.05
+                    if effective_at > now or stats.in_use:
+                        heapq.heappush(self._heap, (effective_at, next(self._counter), stats))
+                        wait_for = max(0.0, effective_at - now)
                         if timeout is not None:
                             remaining = deadline - now
                             if remaining <= 0:
                                 raise ProxyAcquireTimeout("Timed out waiting for available proxy.")
-                            self._cv.wait(min(wait_for, remaining))
+                            self._cv.wait(min(wait_for if wait_for > 0 else 0.05, remaining))
                         else:
-                            self._cv.wait(wait_for)
-                        continue
-                    if stats.in_use:
+                            if wait_for <= 0.0:
+                                self._cv.wait(0.05)
+                            else:
+                                self._cv.wait(wait_for)
                         continue
                     with self._lock:
                         stats.in_use = True
                         stats.assigned_at = now
                         stats.total_sessions += 1
+                        if stats.disabled_until <= now:
+                            stats.disabled_reason = None
                     lease = ProxyLease(self, stats)
                     event = {"type": "acquire", "proxy": stats.label, "index": stats.index}
                     break
@@ -223,13 +251,16 @@ class ProxyPool:
         with self._cv:
             with self._lock:
                 stats.in_use = False
+                now = time.time()
                 cooldown = self._compute_cooldown(stats)
-                available_at = time.time() + cooldown
+                available_at = now + cooldown
                 event = {
                     "type": "release",
                     "proxy": stats.label,
                     "cooldown": cooldown,
                     "index": stats.index,
+                    "quarantine": max(0.0, stats.quarantine_until - now),
+                    "disabled": max(0.0, stats.disabled_until - now),
                 }
             self._push(stats, available_at)
         if event:
@@ -242,6 +273,14 @@ class ProxyPool:
         start = time.perf_counter()
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(timeout)
+        try:
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except OSError:
+            pass
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        except OSError:
+            pass
         try:
             sock.connect((stats.host, stats.port))
         except OSError as exc:
@@ -293,6 +332,9 @@ class ProxyPool:
                         "index": stats.index,
                         "in_use": stats.in_use,
                         "cooldown": max(0.0, stats.cooldown_until - now),
+                        "quarantine": max(0.0, stats.quarantine_until - now),
+                        "disabled": max(0.0, stats.disabled_until - now),
+                        "disabled_reason": stats.disabled_reason,
                         "successes": stats.successes,
                         "proxy_failures": stats.proxy_failures,
                         "target_failures": stats.target_failures,
@@ -300,6 +342,9 @@ class ProxyPool:
                         "last_latency_ms": stats.last_latency_ms,
                         "last_error": stats.last_error,
                         "last_stage": stats.last_stage,
+                        "last_success_ts": stats.last_success_ts,
+                        "last_failure_ts": stats.last_failure_ts,
+                        "total_sessions": stats.total_sessions,
                     }
                 )
             return snapshot
@@ -307,9 +352,49 @@ class ProxyPool:
     # ------------------------------------------------------------------ #
     # Internal helpers
     # ------------------------------------------------------------------ #
+    def _apply_failure_penalty(self, stats: ProxyStats, now: float) -> List[dict]:
+        events: List[dict] = []
+        consecutive = stats.consecutive_proxy_failures
+        if consecutive >= FAIL_QUARANTINE_THRESHOLD:
+            exponent = max(0, consecutive - FAIL_QUARANTINE_THRESHOLD)
+            duration = min(MAX_QUARANTINE_SECONDS, BASE_QUARANTINE_SECONDS * (2 ** exponent))
+            if stats.quarantine_until < now + duration:
+                stats.quarantine_until = now + duration
+                events.append(
+                    {
+                        "type": "proxy-quarantine",
+                        "proxy": stats.label,
+                        "index": stats.index,
+                        "duration": duration,
+                        "until": stats.quarantine_until,
+                        "consecutive": consecutive,
+                    }
+                )
+        if (
+            stats.successes == 0
+            and stats.total_sessions >= FAIL_DISABLE_THRESHOLD
+            and stats.proxy_failures >= FAIL_DISABLE_THRESHOLD
+        ):
+            disable_until = now + HARD_DISABLE_SECONDS
+            if stats.disabled_until < disable_until:
+                stats.disabled_until = disable_until
+                stats.disabled_reason = f"{stats.proxy_failures} failures without success"
+                events.append(
+                    {
+                        "type": "proxy-disabled",
+                        "proxy": stats.label,
+                        "index": stats.index,
+                        "duration": HARD_DISABLE_SECONDS,
+                        "until": stats.disabled_until,
+                        "reason": stats.disabled_reason,
+                    }
+                )
+        return events
+
     def _push(self, stats: ProxyStats, available_at: float) -> None:
-        stats.cooldown_until = available_at
-        heapq.heappush(self._heap, (available_at, next(self._counter), stats))
+        ready_at = max(available_at, stats.quarantine_until, stats.disabled_until)
+        stats.cooldown_until = ready_at
+        heapq.heappush(self._heap, (ready_at, next(self._counter), stats))
         self._cv.notify()
 
     def _emit(self, event: dict) -> None:
@@ -321,12 +406,20 @@ class ProxyPool:
             pass
 
     def _record_success(self, stats: ProxyStats, latency_ms: float) -> None:
+        now = time.time()
+        restored = False
         with self._lock:
             stats.successes += 1
             stats.last_latency_ms = latency_ms
             stats.last_stage = "success"
             stats.last_error = None
             stats.consecutive_proxy_failures = 0
+            if stats.quarantine_until > now or stats.disabled_until > now:
+                restored = True
+            stats.quarantine_until = 0.0
+            stats.disabled_until = 0.0
+            stats.disabled_reason = None
+            stats.last_success_ts = now
         self._emit(
             {
                 "type": "success",
@@ -335,13 +428,24 @@ class ProxyPool:
                 "index": stats.index,
             }
         )
+        if restored:
+            self._emit(
+                {
+                    "type": "proxy-restored",
+                    "proxy": stats.label,
+                    "index": stats.index,
+                }
+            )
 
     def _record_proxy_failure(self, stats: ProxyStats, stage: str, message: str) -> None:
+        now = time.time()
         with self._lock:
             stats.proxy_failures += 1
             stats.consecutive_proxy_failures += 1
             stats.last_error = message
             stats.last_stage = stage
+            stats.last_failure_ts = now
+            penalty_events = self._apply_failure_penalty(stats, now)
         self._emit(
             {
                 "type": "proxy-failure",
@@ -351,6 +455,8 @@ class ProxyPool:
                 "index": stats.index,
             }
         )
+        for event in penalty_events:
+            self._emit(event)
 
     def _record_target_failure(self, stats: ProxyStats, message: str) -> None:
         with self._lock:
