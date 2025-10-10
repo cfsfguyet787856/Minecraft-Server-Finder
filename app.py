@@ -4,6 +4,7 @@ from datetime import datetime
 from ipaddress import IPv4Address
 from concurrent.futures import ThreadPoolExecutor
 from collections import deque
+from pathlib import Path
 
 from mcsmartscan.constants import (
     BEDROCK_MAGIC,
@@ -29,6 +30,12 @@ from mcsmartscan.utils import (
     permuted_index_generator,
 )
 from mcsmartscan.vpn import MullvadManager
+from mcsmartscan.proxy import (
+    ProxyAcquireTimeout,
+    ProxyHandshakeError,
+    ProxyPool,
+    ProxyTargetError,
+)
 
 try:
     import psutil
@@ -90,6 +97,11 @@ def _nmap_probe(ip, port, timeout):
         return False, None, None
 
 
+def _direct_connector(ip: str, port: int, timeout: float) -> socket.socket:
+    """Return a direct TCP socket connection to the target."""
+    return socket.create_connection((ip, port), timeout=timeout)
+
+
 def ping_host(ip, timeout):
     try:
         if IS_WINDOWS:
@@ -110,10 +122,11 @@ def ping_host(ip, timeout):
         return False, None
 
 
-def check_port(ip, port, timeout):
+def check_port(ip, port, timeout, connector=None):
+    connector = connector or _direct_connector
     try:
         t0 = time.perf_counter()
-        with socket.create_connection((ip, port), timeout=timeout):
+        with connector(ip, port, timeout) as _:
             rtt = (time.perf_counter() - t0) * 1000.0
             return True, rtt
     except Exception:
@@ -189,9 +202,18 @@ def _flatten_motd(desc):
         return ""
 
 
-def _modern_status_once(ip, port, timeout, proto_id=47, handshake_host=None, do_ping_pong=True):
+def _modern_status_once(
+    ip,
+    port,
+    timeout,
+    proto_id=47,
+    handshake_host=None,
+    do_ping_pong=True,
+    connector=None,
+):
+    connector = connector or _direct_connector
     host_in_handshake = handshake_host if handshake_host else ip
-    with socket.create_connection((ip, port), timeout=timeout) as s:
+    with connector(ip, port, timeout) as s:
         s.settimeout(timeout)
         pkt = (
             b"\x00"
@@ -245,8 +267,9 @@ def _modern_status_once(ip, port, timeout, proto_id=47, handshake_host=None, do_
         }
 
 
-def _legacy_status(ip, port, timeout):
-    with socket.create_connection((ip, port), timeout=timeout) as s:
+def _legacy_status(ip, port, timeout, connector=None):
+    connector = connector or _direct_connector
+    with connector(ip, port, timeout) as s:
         s.settimeout(timeout)
         s.sendall(b"\xFE\x01")
         first = s.recv(1)
@@ -270,14 +293,21 @@ def _legacy_status(ip, port, timeout):
         return info
 
 
-def confirm_minecraft_by_protocol(ip, port, timeout, handshake_host=None):
+def confirm_minecraft_by_protocol(ip, port, timeout, handshake_host=None, connector=None):
+    connector = connector or _direct_connector
     info_a = None
     hit_pid = None
     try:
         for pid in PROTOCOL_CANDIDATES:
             try:
                 info_a = _modern_status_once(
-                    ip, port, timeout, proto_id=pid, handshake_host=handshake_host, do_ping_pong=True
+                    ip,
+                    port,
+                    timeout,
+                    proto_id=pid,
+                    handshake_host=handshake_host,
+                    do_ping_pong=True,
+                    connector=connector,
                 )
                 if info_a:
                     hit_pid = pid
@@ -288,7 +318,7 @@ def confirm_minecraft_by_protocol(ip, port, timeout, handshake_host=None):
         info_a = None
     info_b = None
     try:
-        info_b = _legacy_status(ip, port, timeout)
+        info_b = _legacy_status(ip, port, timeout, connector=connector)
     except Exception:
         info_b = None
     if not info_b:
@@ -296,7 +326,13 @@ def confirm_minecraft_by_protocol(ip, port, timeout, handshake_host=None):
             for pid in PROTOCOL_CANDIDATES:
                 try:
                     info_b = _modern_status_once(
-                        ip, port, timeout, proto_id=pid, handshake_host=handshake_host, do_ping_pong=False
+                        ip,
+                        port,
+                        timeout,
+                        proto_id=pid,
+                        handshake_host=handshake_host,
+                        do_ping_pong=False,
+                        connector=connector,
                     )
                     if info_b and not hit_pid:
                         hit_pid = pid
@@ -376,7 +412,7 @@ def bedrock_ping(ip, port, timeout):
         return False, None, None
 
 
-def _extra_fallback_probe(ip, timeout, handshake_host=None):
+def _extra_fallback_probe(ip, timeout, handshake_host=None, connector=None):
     """
     Probe a Java port using multiple strategies ordered by reliability:
     1) mcstatus
@@ -409,7 +445,11 @@ def _extra_fallback_probe(ip, timeout, handshake_host=None):
     custom_info = None
     try:
         ok_custom, info_custom, _ = confirm_minecraft_by_protocol(
-            ip, DEFAULT_PORT, timeout, handshake_host=handshake_host
+            ip,
+            DEFAULT_PORT,
+            timeout,
+            handshake_host=handshake_host,
+            connector=connector,
         )
         if ok_custom:
             custom_ok = True
@@ -464,6 +504,7 @@ class ScannerAppGUI:
     def __init__(self, root):
         self.root = root
         root.title("Minecraft Scanner - Hybrid Backend")
+        self._ensure_full_cpu_affinity()
 
         # --- Core state ---
         self._stop = threading.Event()
@@ -475,6 +516,12 @@ class ScannerAppGUI:
 
         # --- Storage ---
         self.storage = StorageManager()
+
+        # --- Proxy management ---
+        self.proxy_pool = None
+        self._proxy_enabled = False
+        self._proxy_snapshot = []
+        self._init_proxy_pool()
 
         # --- Mullvad management ---
         self.vpn_manager = MullvadManager(
@@ -576,6 +623,13 @@ class ScannerAppGUI:
         self.var_active_threads = tk.IntVar(value=0)
         self.var_dark_mode = tk.BooleanVar(value=True)
 
+        # --- Proxy monitoring vars ---
+        default_proxy_text = (
+            f"Proxies loaded: {self.proxy_pool.total} (ready)" if self._proxy_enabled else "Proxies disabled"
+        )
+        self.var_proxy_summary = tk.StringVar(value=default_proxy_text)
+        self.var_proxy_health_hint = tk.StringVar(value="")
+
         self._theme_palettes = {}
         self._current_theme = "dark"
         self._tree_style = "Scanner.Treeview"
@@ -659,6 +713,52 @@ class ScannerAppGUI:
         self.var_test_host = tk.StringVar(value="")
         ttk.Entry(tools, textvariable=self.var_test_host).grid(row=1, column=3, sticky="ew", padx=(0, 12), pady=4)
         ttk.Button(tools, text="Run Test", command=self.run_direct_test).grid(row=1, column=4, sticky="w", padx=(0, 8), pady=4)
+
+        proxy_frame = ttk.LabelFrame(container, text="Proxy Pool")
+        proxy_frame.pack(fill="x", padx=4, pady=(0, 6))
+        proxy_frame.columnconfigure(0, weight=1)
+        proxy_frame.columnconfigure(1, weight=0)
+        proxy_frame.rowconfigure(1, weight=1)
+
+        proxy_header = ttk.Frame(proxy_frame)
+        proxy_header.grid(row=0, column=0, columnspan=2, sticky="ew", padx=8, pady=(6, 2))
+        proxy_header.columnconfigure(0, weight=1)
+        ttk.Label(proxy_header, textvariable=self.var_proxy_summary).grid(row=0, column=0, sticky="w")
+        ttk.Label(proxy_header, textvariable=self.var_proxy_health_hint, style=self._muted_label_style).grid(row=0, column=1, sticky="e")
+
+        proxy_columns = ("proxy", "status", "latency", "ok", "pfail", "tfail")
+        self.proxy_tree = ttk.Treeview(proxy_frame, columns=proxy_columns, show="headings", height=5)
+        for col, title, width, anchor in [
+            ("proxy", "Proxy", 160, "w"),
+            ("status", "Status", 130, "w"),
+            ("latency", "Latency (ms)", 110, "center"),
+            ("ok", "OK", 70, "center"),
+            ("pfail", "Proxy Fail", 100, "center"),
+            ("tfail", "Target Fail", 100, "center"),
+        ]:
+            self.proxy_tree.heading(col, text=title, anchor=anchor)
+            self.proxy_tree.column(
+                col,
+                width=width,
+                anchor=anchor,
+                stretch=False if col in {"latency", "ok", "pfail", "tfail"} else True,
+            )
+        proxy_scroll = ttk.Scrollbar(proxy_frame, orient="vertical", command=self.proxy_tree.yview)
+        self.proxy_tree.configure(yscrollcommand=proxy_scroll.set)
+        self.proxy_tree.grid(row=1, column=0, sticky="ew", padx=(8, 0), pady=(0, 4))
+        proxy_scroll.grid(row=1, column=1, sticky="ns", padx=(0, 8), pady=(0, 4))
+
+        ttk.Label(proxy_frame, text="Proxy Log").grid(row=2, column=0, sticky="w", padx=8, pady=(6, 2))
+        self.proxy_log = scrolledtext.ScrolledText(
+            proxy_frame,
+            height=5,
+            state="disabled",
+            font=("Consolas", 9),
+            relief="flat",
+            borderwidth=0,
+        )
+        self.proxy_log.grid(row=3, column=0, columnspan=2, sticky="ew", padx=8, pady=(0, 6))
+        self._refresh_proxy_health_ui()
 
         controls = ttk.Frame(container)
         controls.pack(fill="x", padx=4, pady=(0, 4))
@@ -816,6 +916,53 @@ class ScannerAppGUI:
         self.root.after(500, self._tick)
         self.root.after(1000, self._update_threads_stat)
 
+    def _init_proxy_pool(self):
+        """Load Mullvad proxy endpoints and attach health callback."""
+        path = None
+        try:
+            path = Path(__file__).resolve().parent / "mcsmartscan" / "mullvadproxyips.txt"
+        except Exception:
+            pass
+        pool = None
+        if path is not None:
+            pool = ProxyPool.from_file(path, default_port=1080, event_callback=self._handle_proxy_event)
+            if pool.total <= 0:
+                pool = None
+        if pool:
+            self.proxy_pool = pool
+            self._proxy_enabled = True
+            self._uiq_put(("log", f"[PROXY] Loaded {pool.total} Mullvad proxy endpoints.", "info"))
+        else:
+            self.proxy_pool = None
+            self._proxy_enabled = False
+            if path:
+                self._uiq_put(("log", f"[PROXY] No proxies found at {path}", "warn"))
+            else:
+                self._uiq_put(("log", "[PROXY] Failed to resolve proxy list path.", "warn"))
+
+    def _handle_proxy_event(self, event: dict) -> None:
+        """Receive async events from the proxy pool."""
+        if not isinstance(event, dict):
+            return
+        event = dict(event)
+        event.setdefault("type", "info")
+        self._uiq_put(("proxy-event", event))
+
+    def _ensure_full_cpu_affinity(self):
+        """Allow the process to run on all logical CPUs when possible."""
+        if not psutil:
+            return
+        try:
+            proc = psutil.Process()
+            if hasattr(proc, "cpu_affinity"):
+                logical = psutil.cpu_count(logical=True) or os.cpu_count() or 1
+                desired = list(range(max(1, logical)))
+                current = proc.cpu_affinity()
+                if set(current) != set(desired):
+                    proc.cpu_affinity(desired)
+        except Exception:
+            pass
+
     def _init_theme(self):
         self._style = ttk.Style()
         try:
@@ -954,6 +1101,11 @@ class ScannerAppGUI:
                 self.maybe_tree.configure(style=self._tree_style)
             except Exception:
                 pass
+        if hasattr(self, "proxy_tree"):
+            try:
+                self.proxy_tree.configure(style=self._tree_style)
+            except Exception:
+                pass
 
         if hasattr(self, "log"):
             try:
@@ -964,6 +1116,24 @@ class ScannerAppGUI:
                 self.log.tag_config("red", foreground=palette["danger"])
                 self.log.tag_config("info", foreground=palette["muted"])
                 self.log.tag_config("muted", foreground=palette["muted"])
+            except Exception:
+                pass
+        if hasattr(self, "proxy_log"):
+            try:
+                self.proxy_log.configure(
+                    bg=palette["bg_alt"],
+                    fg=palette["fg"],
+                    insertbackground=palette["fg"],
+                    highlightthickness=0,
+                    borderwidth=0,
+                )
+                for tag, colour in [
+                    ("info", palette["muted"]),
+                    ("warn", palette["warn"]),
+                    ("error", palette["danger"]),
+                    ("success", palette["success"]),
+                ]:
+                    self.proxy_log.tag_config(tag, foreground=colour)
             except Exception:
                 pass
         if hasattr(self, "ctl"):
@@ -1237,6 +1407,21 @@ class ScannerAppGUI:
         # Allowed public vars only
         self.max_concurrency = max(1, int(self.var_threads.get()))
         self.current_concurrency = self.max_concurrency
+        if self.proxy_pool and self._proxy_enabled:
+            self.proxy_pool.prepare_for_run()
+            proxy_total = self.proxy_pool.total
+            if proxy_total <= 0:
+                self._proxy_enabled = False
+                self.var_proxy_summary.set("Proxies unavailable")
+            else:
+                if self.max_concurrency > proxy_total:
+                    self.max_concurrency = proxy_total
+                    self._ctl_async(
+                        f"[PROXY] Limiting concurrency to {proxy_total} to match proxy count.",
+                        tag="threads",
+                    )
+                self.current_concurrency = self.max_concurrency
+                self.var_proxy_summary.set(f"Proxies loaded: {proxy_total} (in use 0)")
         self.auto_limit_on = bool(self.var_auto_limit.get())
         try:
             self.auto_limit_threshold = max(0.50, min(0.999, float(self.var_failthr.get())/100.0))
@@ -1344,7 +1529,17 @@ class ScannerAppGUI:
                     with self._active_tasks_lock:
                         self._active_tasks += 1
                     if self.executor:
-                        self.executor.submit(self._worker_wrapper, ip, timeout)
+                        lease = None
+                        if self.proxy_pool and self._proxy_enabled:
+                            try:
+                                lease = self.proxy_pool.acquire(timeout=1.0)
+                            except ProxyAcquireTimeout:
+                                with self._active_tasks_lock:
+                                    self._active_tasks = max(0, self._active_tasks - 1)
+                                self._uiq_put(("proxy-log", f"[PROXY] No available proxy for {ip}", "warn"))
+                                time.sleep(0.05)
+                                continue
+                        self.executor.submit(self._worker_wrapper, ip, timeout, lease)
                     else:
                         return
                 except Exception:
@@ -1467,14 +1662,19 @@ class ScannerAppGUI:
             else:
                 self._stable_ok_windows = 0
 
-    def _worker_wrapper(self, ip, timeout):
+    def _worker_wrapper(self, ip, timeout, lease=None):
         try:
-            self._worker(ip, timeout)
+            self._worker(ip, timeout, lease)
         finally:
+            if lease:
+                try:
+                    lease.close()
+                except Exception:
+                    pass
             with self._active_tasks_lock:
                 self._active_tasks = max(0, self._active_tasks - 1)
 
-    def _worker(self, ip, timeout):
+    def _worker(self, ip, timeout, lease=None):
         try:
             if self._stop.is_set() or self._pause.is_set():
                 return
@@ -1489,6 +1689,8 @@ class ScannerAppGUI:
             except Exception:
                 base_t = float(self.var_timeout)
             dyn_timeout = self._adaptive_timeout(max(1e-3, base_t))
+
+            connector = lease.connector if lease else _direct_connector
 
             ok_ping, rtt = ping_host(ip, dyn_timeout)
             self.ping_attempts += 1
@@ -1509,7 +1711,7 @@ class ScannerAppGUI:
                     return
 
             # Ports (log concise open/closed only)
-            open_java, _ = check_port(ip, DEFAULT_PORT, dyn_timeout)
+            open_java, _ = check_port(ip, DEFAULT_PORT, dyn_timeout, connector=connector)
             ok_bedrock, info_b, rtt_b = bedrock_ping(ip, DEFAULT_BEDROCK_PORT, dyn_timeout)
 
             if open_java and ok_bedrock:
@@ -1534,7 +1736,12 @@ class ScannerAppGUI:
                 except Exception:
                     pass
                 self._save_current_blob()
-                ok2, info2, conf2, sources2 = _extra_fallback_probe(ip, dyn_timeout, handshake_host=self._host_override_for_scan)
+                ok2, info2, conf2, sources2 = _extra_fallback_probe(
+                    ip,
+                    dyn_timeout,
+                    handshake_host=self._host_override_for_scan,
+                    connector=connector,
+                )
                 addr = f"{ip}:{DEFAULT_PORT}"
                 if ok2:
                     conf_label = self._normalize_confidence(conf2, "Possible")
@@ -1657,6 +1864,16 @@ class ScannerAppGUI:
             timeout = float(self.var_timeout.get())
         except Exception:
             timeout = float(self.var_timeout)
+        lease = None
+        connector = _direct_connector
+        if self.proxy_pool and self._proxy_enabled:
+            try:
+                lease = self.proxy_pool.acquire(timeout=2.0)
+                connector = lease.connector
+                self._proxy_log(f"[PROXY] Test using {lease.label}", "info")
+            except ProxyAcquireTimeout:
+                lease = None
+                connector = _direct_connector
         try:
             ok, rtt = ping_host(target, timeout)
             if ok:
@@ -1664,7 +1881,7 @@ class ScannerAppGUI:
             else:
                 self._log_info(f"[TEST] Ping to {target} failed")
 
-            open_ok, rtt2 = check_port(target, 25565, timeout)
+            open_ok, rtt2 = check_port(target, 25565, timeout, connector=connector)
             if open_ok:
                 self._log_info(f"[TEST] Port 25565 open" + (f" ({rtt2:.1f} ms)" if rtt2 is not None else ""))
                 # mcstatus first
@@ -1683,7 +1900,7 @@ class ScannerAppGUI:
                     except Exception:
                         pass
                 if not tried_mcstatus:
-                    okp, info, _ = confirm_minecraft_by_protocol(target, 25565, timeout)
+                    okp, info, _ = confirm_minecraft_by_protocol(target, 25565, timeout, connector=connector)
                     if okp and info:
                         ver = info.get("version", "?")
                         players = info.get("players", 0)
@@ -1695,6 +1912,12 @@ class ScannerAppGUI:
                 self._log_info("[TEST] Port 25565 closed.")
         except Exception as e:
             self._log_info(f"[ERROR] Test failed: {e}")
+        finally:
+            if lease:
+                try:
+                    lease.close()
+                except Exception:
+                    pass
 
     def _pump_ui(self):
         """
@@ -1703,6 +1926,8 @@ class ScannerAppGUI:
         """
         try:
             drained = 0
+            proxy_logs = []
+            proxy_events = []
             while not self._uiq.empty() and drained < 500:
                 item = self._uiq.get_nowait()
                 drained += 1
@@ -1712,10 +1937,17 @@ class ScannerAppGUI:
                 if isinstance(item, str):
                     msg = item
                 elif isinstance(item, tuple):
-                    if len(item) >= 2 and item[0] == "log":
+                    kind = item[0]
+                    if len(item) >= 2 and kind == "log":
                         msg = item[1]
                         if len(item) >= 3 and isinstance(item[2], str):
                             tag = item[2]
+                    elif len(item) >= 2 and kind == "proxy-log":
+                        proxy_logs.append((item[1], item[2] if len(item) >= 3 else "info"))
+                        continue
+                    elif len(item) >= 2 and kind == "proxy-event":
+                        proxy_events.append(item[1])
+                        continue
                     elif len(item) >= 1 and item[0] in ("proc", "progress", "metric", "processed", "done"):
                         continue
                     else:
@@ -1744,6 +1976,15 @@ class ScannerAppGUI:
                     print(msg)
         except Exception:
             pass
+
+        if proxy_events:
+            for event in proxy_events:
+                self._handle_proxy_event_ui(event)
+            self._refresh_proxy_health_ui()
+
+        if proxy_logs:
+            for log_msg, log_tag in proxy_logs:
+                self._proxy_log(log_msg, log_tag)
 
         # Refresh simple counters (no logging)
         try:
@@ -1922,6 +2163,94 @@ class ScannerAppGUI:
                 print(msg)
         except Exception:
             print(msg)
+
+    def _proxy_log(self, msg: str, tag: str = "info"):
+        if not msg:
+            return
+        try:
+            if hasattr(self, "proxy_log"):
+                self.proxy_log.configure(state="normal")
+                self.proxy_log.insert("end", str(msg) + "\n", tag)
+                self.proxy_log.configure(state="disabled")
+                self.proxy_log.see("end")
+            else:
+                print(msg)
+        except Exception:
+            print(msg)
+
+    def _handle_proxy_event_ui(self, event: dict) -> None:
+        if not isinstance(event, dict):
+            return
+        kind = event.get("type") or "info"
+        label = event.get("proxy") or "?"
+        if kind == "proxy-failure":
+            stage = event.get("stage")
+            error = event.get("error") or "proxy failure"
+            detail = f"[PROXY] {label} failure: {error}"
+            if stage:
+                detail += f" ({stage})"
+            self._proxy_log(detail, "error")
+        elif kind == "target-failure":
+            error = event.get("error") or "target failure"
+            self._proxy_log(f"[PROXY] {label} target error: {error}", "warn")
+        elif kind == "success":
+            latency = event.get("latency_ms")
+            if latency is not None:
+                self.var_proxy_health_hint.set(f"{label} success {latency:.1f} ms")
+        elif kind == "release":
+            cooldown = float(event.get("cooldown") or 0.0)
+            self.var_proxy_health_hint.set(f"{label} released ({cooldown:.1f}s cooldown)")
+        elif kind == "acquire":
+            self.var_proxy_health_hint.set(f"{label} in use")
+
+    def _refresh_proxy_health_ui(self):
+        if not hasattr(self, "proxy_tree"):
+            return
+        if not self.proxy_pool:
+            self.proxy_tree.delete(*self.proxy_tree.get_children())
+            self.var_proxy_summary.set("Proxies disabled")
+            self.var_proxy_health_hint.set("")
+            return
+        snapshot = self.proxy_pool.health_snapshot()
+        self._proxy_snapshot = snapshot
+        total = len(snapshot)
+        in_use = sum(1 for item in snapshot if item.get("in_use"))
+        cooling = sum(1 for item in snapshot if not item.get("in_use") and (item.get("cooldown") or 0) > 0.05)
+        available = total - in_use
+        self.var_proxy_summary.set(
+            f"Proxies loaded: {total} | in use {in_use} | cooling {cooling} | idle {max(0, available - cooling)}"
+        )
+        existing = set(self.proxy_tree.get_children())
+        for item_id in existing:
+            self.proxy_tree.delete(item_id)
+        for entry in snapshot:
+            label = entry.get("label", "?")
+            cooldown = float(entry.get("cooldown") or 0.0)
+            in_use_flag = bool(entry.get("in_use"))
+            if in_use_flag:
+                status = "In use"
+            elif cooldown > 0.05:
+                status = f"Cooling {cooldown:.1f}s"
+            else:
+                status = "Idle"
+            last_stage = entry.get("last_stage")
+            last_error = entry.get("last_error")
+            if last_error:
+                status = f"{status} ({last_stage or 'error'})"
+            latency = entry.get("last_latency_ms")
+            latency_str = f"{latency:.1f}" if latency is not None else "-"
+            self.proxy_tree.insert(
+                "",
+                "end",
+                values=(
+                    label,
+                    status,
+                    latency_str,
+                    entry.get("successes", 0),
+                    entry.get("proxy_failures", 0),
+                    entry.get("target_failures", 0),
+                ),
+            )
 # ============================== SECTION 8: GUI HELPERS / STATS / TICK (END) ==============================
 
 # ============================== SECTION 9: FILES / LOGGING / TABLE HELPERS (START) ==============================
@@ -2424,12 +2753,21 @@ class ScannerAppGUI:
         except Exception:
             base_timeout = max(1e-3, float(self.var_timeout))
         dyn_timeout = self._adaptive_timeout(base_timeout)
+        lease = None
+        connector = _direct_connector
+        if self.proxy_pool and self._proxy_enabled:
+            try:
+                lease = self.proxy_pool.acquire(timeout=2.0)
+                connector = lease.connector
+            except ProxyAcquireTimeout:
+                lease = None
+                connector = _direct_connector
         ok_ping, rtt = ping_host(ip, dyn_timeout)
         if not ok_ping:
             self._uiq_put(("log", f"{address} - recheck ping failed", "muted"))
 
         if port == DEFAULT_PORT:
-            open_java, _ = check_port(ip, DEFAULT_PORT, dyn_timeout)
+            open_java, _ = check_port(ip, DEFAULT_PORT, dyn_timeout, connector=connector)
             if not open_java:
                 if self._remove_confirmed_server(address):
                     result["refresh_confirmed"] = True
@@ -2437,8 +2775,18 @@ class ScannerAppGUI:
                 if info["created"] or info["reason_changed"]:
                     self._ctl_async(f"[RECHECK] {address} -> port closed", tag="maybe")
                 self._uiq_put(("log", f"{address} recheck: port 25565 closed", "orange"))
+                if lease:
+                    try:
+                        lease.close()
+                    except Exception:
+                        pass
                 return result
-            ok2, info2, conf2, sources2 = _extra_fallback_probe(ip, dyn_timeout, handshake_host=self._host_override_for_scan)
+            ok2, info2, conf2, sources2 = _extra_fallback_probe(
+                ip,
+                dyn_timeout,
+                handshake_host=self._host_override_for_scan,
+                connector=connector,
+            )
             if ok2:
                 conf_label = self._normalize_confidence(conf2, "Possible")
                 conf_lower = (conf_label or "").lower()
@@ -2532,9 +2880,14 @@ class ScannerAppGUI:
                 if info["created"] or info["reason_changed"]:
                     self._ctl_async(f"[RECHECK] {address} -> bedrock response missing", tag="maybe")
                 self._uiq_put(("log", f"{address} recheck: bedrock response missing", "orange"))
+            if lease:
+                try:
+                    lease.close()
+                except Exception:
+                    pass
             return result
 
-        open_generic, _ = check_port(ip, port, dyn_timeout)
+        open_generic, _ = check_port(ip, port, dyn_timeout, connector=connector)
         if not open_generic:
             if self._remove_confirmed_server(address):
                 result["refresh_confirmed"] = True
@@ -2545,6 +2898,11 @@ class ScannerAppGUI:
         else:
             self._ctl_async(f"[RECHECK] {address} port {port} open (no parser available)", tag="info")
             self._uiq_put(("log", f"{address} recheck: port {port} open (no parser)", "blue"))
+        if lease:
+            try:
+                lease.close()
+            except Exception:
+                pass
         return result
 # ============================== SECTION 9: FILES / LOGGING / TABLE HELPERS (END) ===============================
 
