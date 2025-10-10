@@ -173,21 +173,35 @@ class MullvadManager:
             self._status.last_error = None
         self._emit_status()
 
+    def _prime_cli_imports(self) -> None:
+        """Ensure legacy import names used by mullvad.cli resolve."""
+        try:
+            exceptions_mod = importlib.import_module("mullvad.exceptions")
+            sys.modules["exceptions"] = exceptions_mod
+        except Exception:
+            pass
+        try:
+            models_mod = importlib.import_module("mullvad.models")
+            sys.modules["models"] = models_mod
+        except Exception:
+            pass
+
     def _collect_cli_status(self) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
         path = self.cli_path or shutil.which("mullvad")
         if not path:
             return None, "cli-missing"
 
+        self._prime_cli_imports()
         try:
             cli_module = importlib.import_module("mullvad.cli")
         except Exception:
             try:
-                exceptions_mod = importlib.import_module("mullvad.exceptions")
-                sys.modules.setdefault("exceptions", exceptions_mod)
-                models_mod = importlib.import_module("mullvad.models")
-                sys.modules.setdefault("models", models_mod)
+                self._prime_cli_imports()
                 cli_module = importlib.import_module("mullvad.cli")
             except Exception as exc:
+                fallback = self._collect_cli_status_subprocess(path)
+                if fallback:
+                    return fallback, None
                 return None, str(exc)
 
         try:
@@ -221,7 +235,38 @@ class MullvadManager:
                 None,
             )
         except Exception as exc:
+            fallback = self._collect_cli_status_subprocess(path)
+            if fallback:
+                return fallback, None
             return None, str(exc)
+
+    def _collect_cli_status_subprocess(self, path: str) -> Optional[Dict[str, Any]]:
+        """Fallback parser calling the mullvad CLI directly."""
+        try:
+            result = subprocess.run(
+                [path, "status"],
+                capture_output=True,
+                text=True,
+                timeout=20,
+                check=False,
+            )
+        except Exception:
+            return None
+
+        output = (result.stdout or "").strip()
+        if not output:
+            return None
+
+        lines = [line.strip() for line in output.splitlines() if line.strip()]
+        connected = any("Connected" in line for line in lines) and not any("Disconnected" in line for line in lines)
+        connection_line = next((line for line in lines if "Connected" in line or "Disconnected" in line), lines[0])
+        server_hint = next((line for line in lines if "Connected to" in line), None)
+        return {
+            "status_raw": output,
+            "connected": connected,
+            "connection_line": connection_line,
+            "server_hint": server_hint,
+        }
 
     # ------------------------------------------------------------------ #
     # Lifecycle control
