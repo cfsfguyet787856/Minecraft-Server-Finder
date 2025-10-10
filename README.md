@@ -24,6 +24,9 @@ machine.
 - **Protocol aware detection** – performs full Minecraft status handshakes for
   modern and legacy protocol versions to confirm that an open port is really a
   Minecraft server.
+- **SOCKS5 proxy rotation** – optionally routes probes through a managed pool
+  of Mullvad (or custom) SOCKS endpoints with automatic health tracking and
+  cooldowns to spread load across exit IPs.
 - **Optional helper tools** – integrates with `mcstatus` for richer status
   queries, `python-nmap` for port verification, `psutil` for system monitoring,
   and Mullvad's CLI/SDKs for VPN cycling when scanning.
@@ -38,21 +41,25 @@ machine.
 
 ```
 .
+├── .github/workflows/  # CI configuration
 ├── app.py              # Main entry point with GUI + console launcher
 ├── mcsmartscan/        # Reusable package for the scanning engine
 │   ├── __init__.py
 │   ├── constants.py    # Defaults, protocol tables and helper enums
+│   ├── mullvadproxyips.txt  # Default SOCKS5 pool (host[:port] per line)
+│   ├── proxy.py        # SOCKS5 proxy rotation + health tracking
 │   ├── storage.py      # Persistence helpers for scan results
 │   ├── utils.py        # IP range iterators and misc helpers
 │   └── vpn.py          # Mullvad VPN integration layer
-├── MCSmartScan.py      # Original single-file script kept for reference
 ├── LICENSE
-└── README.md
+├── README.md
+└── requirements.txt
 ```
 
-The `app.py` script is the recommended way to run the scanner. The legacy
-`MCSmartScan.py` script mirrors much of the behaviour but is retained for
-historical context and quick one-off modifications.
+The `app.py` script is the recommended way to run the scanner. The
+`mcsmartscan` package exposes the reusable building blocks—storage, proxy
+management, VPN helpers and utility functions—if you want to embed the engine
+in your own tooling.
 
 ## Requirements
 
@@ -109,6 +116,25 @@ IP ranges, concurrency, ping/handshake requirements, VPN cycling and review the
 live logs. Results are written to `Minecraft_Servers.txt`, `Open_Ports.txt` and
 `saved_servers.json` under the storage directory (Desktop by default).
 
+### Proxy-assisted scanning (optional)
+
+When a SOCKS5 list is available, the GUI automatically enables a proxy pool so
+that every outbound probe is tunnelled through an exit server:
+
+1. Keep the bundled `mcsmartscan/mullvadproxyips.txt` file up to date with the
+   Mullvad SOCKS IPs you want to use. Each line accepts `host` or `host:port`
+   (defaults to `1080`) and ignores blank lines or those starting with `#`.
+2. Connect the Mullvad app/CLI to a SOCKS-enabled location before starting a
+   scan so that the endpoints are reachable.
+3. Start a scan as usual. The **Proxy Pool** panel shows live health metrics,
+   latency measurements, cooldowns and a rolling log of proxy failures.
+
+The pool limits worker concurrency to the number of healthy proxies, retries
+failed endpoints with exponential cooldowns and exposes the same connectors to
+the **Run Test** tool. To disable proxying entirely, remove or empty the text
+file (the scanner falls back to direct connections) or replace it with your own
+SOCKS5 list for other providers.
+
 ### Quick-start workflow
 
 1. Clone the repository and install the recommended dependencies.
@@ -131,15 +157,6 @@ Passing `--nogui` forces console mode, which is also selected automatically when
 Tkinter is missing. The console shim expects a custom scan loop function (see
 `app.py` for entrypoint names) and keeps the process alive so you can integrate
 it with your own orchestration scripts.
-
-### Legacy script
-
-```
-python MCSmartScan.py
-```
-
-The legacy script mirrors the core features of the modern scanner but stays in a
-single file for users who prefer the original layout.
 
 ## Output Files
 
@@ -172,13 +189,17 @@ most commonly tweaked parameters include:
   marking a host as unreachable and how often to reattempt connections.
 - **VPN cycling** – enable Mullvad integration to rotate exit IPs on a schedule
   when running long scans.
+- **Proxy pool** – edit `mcsmartscan/mullvadproxyips.txt` to point at the SOCKS5
+  hosts you want to rotate through; the GUI automatically scales concurrency to
+  the number of healthy proxies and exposes live health telemetry.
 
 ## Development Tips
 
 - The repository is pure Python, so standard tools such as `black`, `ruff` or
   `mypy` can be adopted easily.
 - The modular `mcsmartscan` package can be imported into your own projects if
-  you want to reuse the IP generators, storage layer or Mullvad integration.
+  you want to reuse the IP generators, storage layer, SOCKS proxy pool or
+  Mullvad integration.
 - Contributions are welcome! Please open an issue or pull request describing the
   enhancement or bug fix you have in mind.
 
