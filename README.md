@@ -15,6 +15,8 @@ machine.
 > using the tool you agree that you are solely accountable for complying with all
 > applicable laws and agreements.
 
+<img width="2880" height="1799" alt="image" src="https://github.com/user-attachments/assets/d2ebae98-4f35-42bd-a270-8e9bba4d09c1" />
+
 ## Highlights
 
 - **Multi-threaded scanning engine** – efficiently probes thousands of hosts
