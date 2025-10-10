@@ -798,8 +798,17 @@ class ScannerAppGUI:
         proxy_header = ttk.Frame(proxy_frame)
         proxy_header.grid(row=0, column=0, columnspan=2, sticky="ew", padx=8, pady=(6, 2))
         proxy_header.columnconfigure(0, weight=1)
+        proxy_header.columnconfigure(1, weight=0)
+        proxy_header.columnconfigure(2, weight=0)
         ttk.Label(proxy_header, textvariable=self.var_proxy_summary).grid(row=0, column=0, sticky="w")
-        ttk.Label(proxy_header, textvariable=self.var_proxy_health_hint, style=self._muted_label_style).grid(row=0, column=1, sticky="e")
+        ttk.Label(proxy_header, textvariable=self.var_proxy_health_hint, style=self._muted_label_style).grid(row=0, column=1, sticky="e", padx=(0, 8))
+        self.btn_toggle_proxy = ttk.Button(
+            proxy_header,
+            text="Disable Proxies" if self._proxy_enabled else "Enable Proxies",
+            width=16,
+            command=self.toggle_proxy_usage,
+        )
+        self.btn_toggle_proxy.grid(row=0, column=2, sticky="e")
 
         proxy_columns = ("proxy", "status", "latency", "ok", "pfail", "tfail")
         self.proxy_tree = ttk.Treeview(proxy_frame, columns=proxy_columns, show="headings", height=5)
@@ -834,6 +843,7 @@ class ScannerAppGUI:
         )
         self.proxy_log.grid(row=3, column=0, columnspan=2, sticky="ew", padx=8, pady=(0, 6))
         self._refresh_proxy_health_ui()
+        self._update_proxy_toggle_button()
 
         controls = ttk.Frame(container)
         controls.pack(fill="x", padx=4, pady=(0, 4))
@@ -1025,6 +1035,38 @@ class ScannerAppGUI:
                 self._uiq_put(("log", f"[PROXY] No proxies found at {path}", "warn"))
             else:
                 self._uiq_put(("log", "[PROXY] Failed to resolve proxy list path.", "warn"))
+
+    def toggle_proxy_usage(self):
+        """Toggle proxy usage on or off from the UI."""
+        if not self.proxy_pool:
+            messagebox.showwarning(
+                "Proxy Unavailable",
+                "No proxy endpoints are loaded. Add proxies to enable this feature.",
+            )
+            self._proxy_enabled = False
+            self._update_proxy_toggle_button()
+            self._refresh_proxy_health_ui()
+            return
+        self._proxy_enabled = not self._proxy_enabled
+        if self._proxy_enabled:
+            self.proxy_pool.prepare_for_run()
+            self._proxy_log("[PROXY] Proxy usage enabled.", "info")
+            self.var_proxy_health_hint.set("Proxy usage enabled")
+        else:
+            self._proxy_log("[PROXY] Proxy usage disabled.", "info")
+            self.var_proxy_health_hint.set("Proxy usage disabled")
+        self._update_proxy_toggle_button()
+        self._refresh_proxy_health_ui()
+
+    def _update_proxy_toggle_button(self):
+        """Ensure the proxy toggle button reflects availability and state."""
+        if not hasattr(self, "btn_toggle_proxy"):
+            return
+        if not self.proxy_pool:
+            self.btn_toggle_proxy.configure(text="Enable Proxies", state="disabled")
+            return
+        btn_text = "Disable Proxies" if self._proxy_enabled else "Enable Proxies"
+        self.btn_toggle_proxy.configure(text=btn_text, state="normal")
 
     def _handle_proxy_event(self, event: dict) -> None:
         """Receive async events from the proxy pool."""
@@ -2340,6 +2382,7 @@ class ScannerAppGUI:
             self.proxy_tree.delete(*self.proxy_tree.get_children())
             self.var_proxy_summary.set("Proxies disabled")
             self.var_proxy_health_hint.set("")
+            self._update_proxy_toggle_button()
             return
         snapshot = self.proxy_pool.health_snapshot()
         self._proxy_snapshot = snapshot
@@ -2347,9 +2390,10 @@ class ScannerAppGUI:
         in_use = sum(1 for item in snapshot if item.get("in_use"))
         cooling = sum(1 for item in snapshot if not item.get("in_use") and (item.get("cooldown") or 0) > 0.05)
         available = total - in_use
-        self.var_proxy_summary.set(
-            f"Proxies loaded: {total} | in use {in_use} | cooling {cooling} | idle {max(0, available - cooling)}"
-        )
+        summary = f"Proxies loaded: {total} | in use {in_use} | cooling {cooling} | idle {max(0, available - cooling)}"
+        if not self._proxy_enabled:
+            summary += " (disabled)"
+        self.var_proxy_summary.set(summary)
         existing = set(self.proxy_tree.get_children())
         for item_id in existing:
             self.proxy_tree.delete(item_id)
@@ -2381,6 +2425,7 @@ class ScannerAppGUI:
                     entry.get("target_failures", 0),
                 ),
             )
+        self._update_proxy_toggle_button()
 # ============================== SECTION 8: GUI HELPERS / STATS / TICK (END) ==============================
 
 # ============================== SECTION 9: FILES / LOGGING / TABLE HELPERS (START) ==============================
