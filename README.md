@@ -15,6 +15,8 @@ machine.
 > using the tool you agree that you are solely accountable for complying with all
 > applicable laws and agreements.
 
+<img width="2880" height="1799" alt="image" src="https://github.com/user-attachments/assets/d2ebae98-4f35-42bd-a270-8e9bba4d09c1" />
+
 ## Highlights
 
 - **Multi-threaded scanning engine** – efficiently probes thousands of hosts
@@ -67,17 +69,32 @@ historical context and quick one-off modifications.
     [`mullvad-python`](https://pypi.org/project/mullvad-python/) – enhance VPN
     state tracking for Mullvad users.
 
-Install the core and optional dependencies with `pip`:
+Install the recommended dependencies with the bundled `requirements.txt` file:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
 pip install --upgrade pip
-pip install mcstatus python-nmap psutil mullvad-api mullvad-python
+pip install -r requirements.txt
 ```
 
 > The scanner gracefully degrades when optional packages are unavailable, so you
-> can install only the libraries you need.
+> can install only the libraries you need. Feel free to edit
+> `requirements.txt` to match the features you plan to use.
+
+### Manual installation
+
+If you prefer to install packages selectively, the key optional helpers are:
+
+- [`mcstatus`](https://pypi.org/project/mcstatus/) – richer Java status
+  queries.
+- [`python-nmap`](https://pypi.org/project/python-nmap/) – additional port
+  probing via Nmap.
+- [`psutil`](https://pypi.org/project/psutil/) – display system resource
+  usage in the UI.
+- [`mullvad-api`](https://pypi.org/project/mullvad-api/) and
+  [`mullvad-python`](https://pypi.org/project/mullvad-python/) – enhance VPN
+  state tracking for Mullvad users.
 
 ## Running the Scanner
 
@@ -91,6 +108,18 @@ If Tkinter is available, the application launches a GUI where you can configure
 IP ranges, concurrency, ping/handshake requirements, VPN cycling and review the
 live logs. Results are written to `Minecraft_Servers.txt`, `Open_Ports.txt` and
 `saved_servers.json` under the storage directory (Desktop by default).
+
+### Quick-start workflow
+
+1. Clone the repository and install the recommended dependencies.
+2. Launch the GUI as shown above and enter the IPv4 ranges you want to inspect
+   (e.g. `192.168.0.0/24`).
+3. Adjust the worker/thread count to suit the bandwidth available on your
+   network connection.
+4. Click **Start Scan** to begin probing. Servers that respond successfully will
+   appear in the results table in real time.
+5. Export the findings directly from the GUI or open the generated files in your
+   storage directory for use in other tooling.
 
 ### Console mode / headless use
 
@@ -125,6 +154,24 @@ By default the scanner stores artefacts in the user's desktop directory:
 
 The destination directory can be overridden through the settings UI or by using
 `StorageManager` directly in custom integrations.
+
+## Configuration reference
+
+Most of the options exposed in the GUI can also be supplied when using
+`app.py --nogui` or by importing the underlying `mcsmartscan` components. The
+most commonly tweaked parameters include:
+
+- **IP ranges** – accept both CIDR blocks (e.g. `203.0.113.0/28`) and explicit
+  start/end pairs. Multiple ranges can be supplied at once.
+- **Port list** – defaults to the standard Java edition port `25565`, but any
+  comma-separated list is accepted.
+- **Worker threads** – increase this value to speed up scans on fast networks,
+  or lower it to reduce bandwidth consumption and avoid overwhelming remote
+  hosts.
+- **Timeouts and retry counts** – tune how long the scanner waits before
+  marking a host as unreachable and how often to reattempt connections.
+- **VPN cycling** – enable Mullvad integration to rotate exit IPs on a schedule
+  when running long scans.
 
 ## Development Tips
 
