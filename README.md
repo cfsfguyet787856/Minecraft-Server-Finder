@@ -158,6 +158,45 @@ Tkinter is missing. The console shim expects a custom scan loop function (see
 `app.py` for entrypoint names) and keeps the process alive so you can integrate
 it with your own orchestration scripts.
 
+### Command-line arguments
+
+The launcher currently accepts a small set of switches. Run `python app.py -h`
+to see the full list or refer to the quick reference below:
+
+| Flag | Description |
+| ---- | ----------- |
+| `--nogui` | Forces console mode even when Tkinter is available. Useful for running inside containers or servers without a display. |
+
+Future releases will expand this list as additional automation hooks are
+promoted from the GUI, so check back if you need more granular control over the
+headless workflow.
+
+## Troubleshooting
+
+- **Tkinter errors on Linux** – Install the `python3-tk` (Debian/Ubuntu) or
+  `tk` (Arch/Fedora) package that matches the Python version you are using.
+- **Proxy pool never initialises** – Ensure the SOCKS5 endpoints listed in
+  `mcsmartscan/mullvadproxyips.txt` are reachable and that your Mullvad client
+  is connected to a SOCKS-enabled location before launching the scanner.
+- **Permission denied writing results** – The storage folder defaults to the
+  desktop of the user account running the scanner. Override the output path in
+  the GUI, or run the program from an account with write access to that
+  location.
+
+## Contributing
+
+Contributions are welcome! If you plan to submit a pull request:
+
+1. Fork the repository and create a feature branch.
+2. Ensure code adheres to the existing style and keep optional dependencies
+   guarded so the core scanner remains lightweight.
+3. Test both GUI and console flows where applicable.
+4. Update the documentation (including this README) when behaviour changes.
+
+Bug reports are just as valuable as code—if you hit an issue please open a
+GitHub issue with reproduction steps, relevant logs and platform details so the
+community can investigate.
+
 ## Output Files
 
 By default the scanner stores artefacts in the user's desktop directory:
