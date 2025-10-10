@@ -15,6 +15,28 @@ from mcsmartscan.constants import (
     DEFAULT_WORKERS,
     IS_WINDOWS,
     MAX_QUEUE,
+    OUTSTANDING_FACTOR,
+    OUTPUT_FILENAME,
+    PROTOCOL_CANDIDATES,
+    PROTOCOL_TO_VERSION_HINT,
+    SAVED_SERVERS_FILE,
+    ping_to_bars,
+)
+from mcsmartscan.storage import StorageManager
+from mcsmartscan.utils import (
+    ip_range_generator,
+    ip_range_size,
+    permuted_index_generator,
+)
+from mcsmartscan.vpn import MullvadManager
+
+try:
+    import psutil
+except Exception:
+    psutil = None
+
+# optional graphs
+_HAVE_MPL = False
 
 # Preferred server checker (primary)
 try:
