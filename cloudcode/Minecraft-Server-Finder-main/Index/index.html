@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft Server Finder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="noise-layer"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+
+    <header class="site-header">
+        <nav class="nav">
+            <a class="logo" href="#top">Minecraft Server Finder</a>
+            <div class="nav-links">
+                <a href="#highlights">Highlights</a>
+                <a href="#architecture">Architecture</a>
+                <a href="#quick-start">Quick Start</a>
+                <a href="#ethics">Ethics</a>
+            </div>
+        </nav>
+        <section class="hero reveal" id="top">
+            <div class="hero-content">
+                <span class="eyebrow">IPv4 Intelligence Scanner</span>
+                <h1>Discover Minecraft servers without guesswork.</h1>
+                <p>A multi-threaded, protocol-aware toolkit that sweeps massive address spaces, rotates proxies, parses MOTDs, and keeps your findings organised.</p>
+                <div class="hero-actions">
+                    <a class="btn primary" href="https://github.com/braydos-h/Minecraft-Server-Finder" target="_blank" rel="noopener">View on GitHub</a>
+                    <a class="btn secondary" href="#quick-start">Launch Guide</a>
+                </div>
+                <ul class="hero-badges">
+                    <li>ThreadPool powered</li>
+                    <li>SOCKS5 Rotation</li>
+                    <li>GUI + Headless</li>
+                    <li>PyInstaller ready</li>
+                </ul>
+            </div>
+            <div class="hero-visual">
+                <div class="grid-card">
+                    <div class="grid-header">
+                        <span class="status-dot"></span>
+                        <span class="grid-title">Live Scan</span>
+                        <span class="grid-rate">152 hosts/s</span>
+                    </div>
+                    <div class="grid-body">
+                        <div class="scan-row">
+                            <span class="scan-ip">104.19.89.21:25565</span>
+                            <span class="scan-ping good">43 ms</span>
+                            <span class="scan-version">1.20.4</span>
+                        </div>
+                        <div class="scan-row">
+                            <span class="scan-ip">172.67.72.44:25565</span>
+                            <span class="scan-ping avg">97 ms</span>
+                            <span class="scan-version">1.19.4</span>
+                        </div>
+                        <div class="scan-row">
+                            <span class="scan-ip">198.51.100.47:25565</span>
+                            <span class="scan-ping great">12 ms</span>
+                            <span class="scan-version">1.21.x</span>
+                        </div>
+                        <div class="scan-row pending">
+                            <span class="scan-ip">203.0.113.140</span>
+                            <span class="scan-ping">probing…</span>
+                            <span class="scan-version">—</span>
+                        </div>
+                        <div class="scan-row offline">
+                            <span class="scan-ip">8.8.8.8:25565</span>
+                            <span class="scan-ping">timeout</span>
+                            <span class="scan-version">—</span>
+                        </div>
+                    </div>
+                    <div class="grid-footer">
+                        <span class="metric-label">Active Workers</span>
+                        <span class="metric-value">150</span>
+                        <span class="metric-label">Proxy Health</span>
+                        <span class="metric-value healthy">98%</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </header>
+
+    <main>
+        <section class="section" id="highlights">
+            <div class="section-heading reveal">
+                <span class="eyebrow">Why teams pick it</span>
+                <h2>High-throughput scanning with deep Minecraft context.</h2>
+                <p>Born from real-world sweeps that demanded reliability, every subsystem is tuned for signal over noise.</p>
+            </div>
+            <div class="feature-grid">
+                <article class="feature-card reveal" data-delay="0">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 46h44v6H10zM10 12h44v6H10zM10 29h44v6H10z" /></svg>
+                    </div>
+                    <h3>Ludicrous throughput</h3>
+                    <p>ThreadPool executors, bounded queues, and adaptive backpressure keep 150+ workers blasting through IPv4 without overwhelming your uplink.</p>
+                </article>
+                <article class="feature-card reveal" data-delay="60">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 8l20 12v24L32 56 12 44V20zM22 36l10 6 10-6v-8l-10-6-10 6z"/></svg>
+                    </div>
+                    <h3>Protocol-aware detection</h3>
+                    <p>Performs proper Java handshake, extracts MOTD, version hints, player counts, and gracefully toggles to <code>mcstatus</code> for richer telemetry.</p>
+                </article>
+                <article class="feature-card reveal" data-delay="120">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M12 18h40v4H12zM12 30h40v4H12zM12 42h40v4H12z"/></svg>
+                    </div>
+                    <h3>Proxy-first resilience</h3>
+                    <p>Battle-tested SOCKS5 rotation with cooldown tracking, exponential backoff, and live health metrics so your long scans never stall.</p>
+                </article>
+                <article class="feature-card reveal" data-delay="180">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M12 12h40v40H12zM20 20v24h24V20z"/></svg>
+                    </div>
+                    <h3>Mullvad automation ready</h3>
+                    <p>Optional Mullvad CLI integration cycles VPN exits on schedule, keeping proxy pools fresh during multi-hour campaigns.</p>
+                </article>
+                <article class="feature-card reveal" data-delay="240">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M12 16h40v4H12zM12 24h24v4H12zM12 32h32v4H12zM12 40h18v4H12z"/></svg>
+                    </div>
+                    <h3>Persistent intelligence</h3>
+                    <p>StorageManager writes confirmed hits, open ports, and GUI state to shareable artefacts you can sync, diff, and revisit later.</p>
+                </article>
+                <article class="feature-card reveal" data-delay="300">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M16 16h32v32H16zM24 24v16h16V24z"/></svg>
+                    </div>
+                    <h3>GUI or headless</h3>
+                    <p>Launch the polished Tkinter interface for visual oversight or run purely from the CLI with rich logging and configurable flags.</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="section split" id="architecture">
+            <div class="section-heading reveal">
+                <span class="eyebrow">Under the hood</span>
+                <h2>Modular by design. Embed the engine anywhere.</h2>
+                <p>The scanning core lives in <code>mcsmartscan</code>, ready for reuse in your own automations or security pipelines.</p>
+            </div>
+            <div class="architecture-timeline">
+                <div class="timeline-item reveal">
+                    <span class="timeline-dot"></span>
+                    <h3>mcsmartscan.utils</h3>
+                    <p>Feistel-based permutation generators reshuffle large IPv4 ranges while guaranteeing full coverage without duplicates.</p>
+                </div>
+                <div class="timeline-item reveal" data-delay="80">
+                    <span class="timeline-dot"></span>
+                    <h3>mcsmartscan.proxy</h3>
+                    <p>ProxyPool manages SOCKS5 endpoints, health scoring, cooldown enforcement, and handshake fallbacks when targets misbehave.</p>
+                </div>
+                <div class="timeline-item reveal" data-delay="160">
+                    <span class="timeline-dot"></span>
+                    <h3>mcsmartscan.storage</h3>
+                    <p>Desktop-aware persistence routes outputs to user-friendly destinations and keeps GUI session state intact between runs.</p>
+                </div>
+                <div class="timeline-item reveal" data-delay="240">
+                    <span class="timeline-dot"></span>
+                    <h3>mcsmartscan.vpn</h3>
+                    <p>MullvadManager talks to the Mullvad CLI/SDK, rotates exits, and surfaces telemetry hooks so you can monitor VPN freshness.</p>
+                </div>
+                <div class="timeline-item reveal" data-delay="320">
+                    <span class="timeline-dot"></span>
+                    <h3>app.py orchestrator</h3>
+                    <p>Wires everything together with Tkinter views, console fallbacks, worker pools, proxy telemetry, and optional <code>mcstatus</code> probes.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="section quick-start" id="quick-start">
+            <div class="section-heading reveal">
+                <span class="eyebrow">Five minute launch</span>
+                <h2>Get scanning in four easy commands.</h2>
+                <p>Works on Windows, macOS, and Linux. Bring your own virtualenv, or ship the PyInstaller build straight to teammates.</p>
+            </div>
+            <div class="qs-content">
+                <div class="qs-steps reveal">
+                    <ol>
+                        <li>Clone the repo &amp; enter the directory</li>
+                        <li>Create a virtual environment (recommended)</li>
+                        <li>Install core + optional dependencies</li>
+                        <li>Launch the GUI or run headless</li>
+                    </ol>
+                </div>
+                <div class="qs-code reveal" data-delay="120">
+                    <pre><code class="language-bash">git clone https://github.com/braydos-h/Minecraft-Server-Finder.git
+cd Minecraft-Server-Finder
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+python app.py  # GUI mode
+# or: python app.py --start 40.0.0.0 --end 45.255.255.255 --headless</code></pre>
+                </div>
+            </div>
+            <div class="qs-footer reveal" data-delay="200">
+                <div class="qs-card">
+                    <h3>Build an executable</h3>
+                    <p>Fire <code>pyinstaller.ps1</code> to generate a Windows-friendly bundle. GitHub Actions mirrors the same flow for release automation.</p>
+                </div>
+                <div class="qs-card">
+                    <h3>Automate the install</h3>
+                    <p>Use <code>install_system.bat</code> for rapid workstation setup. Optional extras like <code>mcstatus</code> and <code>python-nmap</code> enhance detection.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="section metrics">
+            <div class="metric-grid">
+                <div class="metric-card reveal">
+                    <span class="metric-number" data-target="512">0</span>
+                    <span class="metric-label">Concurrent sockets tested per minute with defaults</span>
+                </div>
+                <div class="metric-card reveal" data-delay="80">
+                    <span class="metric-number" data-target="98">0</span>
+                    <span class="metric-label">Proxy pool health maintained during 24h sweep</span>
+                </div>
+                <div class="metric-card reveal" data-delay="160">
+                    <span class="metric-number" data-target="3">0</span>
+                    <span class="metric-label">Platforms supported: Windows, macOS, Linux</span>
+                </div>
+                <div class="metric-card reveal" data-delay="240">
+                    <span class="metric-number" data-target="100">0</span>
+                    <span class="metric-label">Percent control retained over storage paths</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="section ethics" id="ethics">
+            <div class="section-heading reveal">
+                <span class="eyebrow">Safety first</span>
+                <h2>Respect the internet. Scan responsibly.</h2>
+                <p>Only target infrastructure you own or have explicit permission to test. Minecraft Server Finder is a powerful tool&mdash;use it responsibly.</p>
+            </div>
+            <div class="ethics-grid">
+                <div class="ethics-card reveal">
+                    <h3>Permission is paramount</h3>
+                    <p>Unauthorised scanning can breach local laws, ISP policies, and provider terms of service. Always secure written approval.</p>
+                </div>
+                <div class="ethics-card reveal" data-delay="80">
+                    <h3>Throttle thoughtfully</h3>
+                    <p>Adjust worker counts, timeouts, and proxy pools to respect upstream rate limits, especially when testing shared infrastructure.</p>
+                </div>
+                <div class="ethics-card reveal" data-delay="160">
+                    <h3>Handle findings with care</h3>
+                    <p>Confirmed servers may expose sensitive MOTDs or player data. Share responsibly and coordinate disclosure with server operators.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="footer-content">
+            <div>
+                <strong>Minecraft Server Finder</strong>
+                <p>MIT licensed &middot; Built for explorers, defenders, and curious admins.</p>
+            </div>
+            <div class="footer-links">
+                <a href="https://github.com/braydos-h/Minecraft-Server-Finder" target="_blank" rel="noopener">GitHub</a>
+                <a href="https://github.com/braydos-h/Minecraft-Server-Finder/blob/main/README.md" target="_blank" rel="noopener">Documentation</a>
+                <a href="https://github.com/braydos-h/Minecraft-Server-Finder/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -60,7 +60,6 @@ DEFAULT_HEALTH_URL = os.getenv("MULLVAD_CHECK_URL", "https://am.i.mullvad.net/js
 
 BASELINE_PROXIES: Sequence[Tuple[str, int]] = (
     ("10.64.0.1", 1080),
-    ("10.8.0.1", 1080),
 )
 
 
