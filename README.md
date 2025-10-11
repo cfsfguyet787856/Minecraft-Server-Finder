@@ -55,7 +55,8 @@
 ## Screenshot
 
 <div align="center">
-  <img width="900" alt="Minecraft Server Finder GUI screenshot" src="https://github.com/user-attachments/assets/d2ebae98-4f35-42bd-a270-8e9bba4d09c1" />
+  <img width="1919" height="980" alt="{825637BC-D15E-4AE2-A577-6E80CFBF947B}" src="https://github.com/user-attachments/assets/fbe25b54-8964-409f-be0d-681034763295" />
+
 </div>
 
 ## Quick Start
