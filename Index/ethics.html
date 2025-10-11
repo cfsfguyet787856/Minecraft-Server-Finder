@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ethics & FAQ • Minecraft Server Finder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1184608428806759" crossorigin="anonymous"></script>
+</head>
+<body>
+    <div class="noise-layer"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+
+    <header class="site-header">
+        <nav class="nav">
+            <a class="logo" href="index.html">Minecraft Server Finder</a>
+            <div class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="features.html">Features</a>
+                <a href="architecture.html">How It Works</a>
+                <a href="usage.html">Usage Guides</a>
+                <a href="ethics.html">Ethics & FAQ</a>
+            </div>
+        </nav>
+        <section class="page-hero reveal">
+            <span class="eyebrow">Responsible use</span>
+            <h1>Operate Minecraft Server Finder ethically, legally, and transparently.</h1>
+            <p>The maintainers accept no liability for misuse. This page condenses the legal and ethical guidance from <code>README.md</code> so you can stay compliant.</p>
+        </section>
+    </header>
+
+    <main>
+        <section class="section">
+            <div class="section-heading reveal">
+                <span class="eyebrow">Ethics fundamentals</span>
+                <h2>Always secure explicit permission and respect the networks you touch.</h2>
+                <p>These principles are non-negotiable whenever you run scans, whether locally or in distributed infrastructure.</p>
+            </div>
+            <div class="content-grid">
+                <article class="content-card reveal" data-delay="0">
+                    <h3>Authorisation first</h3>
+                    <ul>
+                        <li>Only scan ranges you own or where written consent has been granted.</li>
+                        <li>Review applicable laws, ISP terms, cloud provider policies, and school/company rules.</li>
+                        <li>Document approvals so you can demonstrate compliance later.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="120">
+                    <h3>Operate with restraint</h3>
+                    <ul>
+                        <li>Tune worker counts, timeouts, and proxy pools to align with acceptable use policies.</li>
+                        <li>Respect rate limits from VPN/proxy services such as Mullvad.</li>
+                        <li>Pause scans if contacted by network owners outside your scope.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="240">
+                    <h3>Handle findings responsibly</h3>
+                    <ul>
+                        <li>Confirmed servers may expose MOTDs, player counts, or other information users did not intend to share.</li>
+                        <li>Coordinate disclosure with server operators; never publish sensitive data without consent.</li>
+                        <li>Store artefacts securely if they contain personally identifiable information.</li>
+                    </ul>
+                </article>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading reveal">
+                <span class="eyebrow">Compliance checklist</span>
+                <h2>Run through these steps before every engagement.</h2>
+                <p>Treat the scanner like any penetration-testing or network-auditing tool.</p>
+            </div>
+            <div class="content-grid">
+                <article class="content-card reveal" data-delay="0">
+                    <h3>Before scanning</h3>
+                    <ul>
+                        <li>Collect written permission specifying target ranges, timing windows, and escalation contacts.</li>
+                        <li>Update the proxy list and Mullvad settings to match your approved plan.</li>
+                        <li>Verify storage paths point to secure, access-controlled locations.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="120">
+                    <h3>During scanning</h3>
+                    <ul>
+                        <li>Monitor GUI metrics or console logs for signs of rate limiting or network distress.</li>
+                        <li>Throttle workers or pause scans if you see unexpected load or complaints.</li>
+                        <li>Keep communication lines open with stakeholders to share interim results.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="240">
+                    <h3>After scanning</h3>
+                    <ul>
+                        <li>Deliver results responsibly, omitting sensitive data unless disclosure was approved.</li>
+                        <li>Clean up proxy credentials or VPN sessions that are no longer needed.</li>
+                        <li>Archive artefacts according to your organisation&rsquo;s retention policies.</li>
+                    </ul>
+                </article>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading reveal">
+                <span class="eyebrow">Frequently asked questions</span>
+                <h2>Clarifying common scenarios from the README.</h2>
+                <p>If your question is not covered here, open a discussion or issue on GitHub.</p>
+            </div>
+            <div class="content-grid">
+                <article class="content-card reveal" data-delay="0">
+                    <h3>Does the scanner support Bedrock servers?</h3>
+                    <p>The default port list targets Java (25565). Add Bedrock ports such as 19132 to the GUI or console configuration to generate leads, but treat them as provisional until you confirm via Bedrock-specific tooling.</p>
+                </article>
+                <article class="content-card reveal" data-delay="120">
+                    <h3>Can I pause and resume scans?</h3>
+                    <p>Yes. Stop the GUI scan at any point; <code>StorageManager</code> persists results so you can restart later without losing confirmed hosts.</p>
+                </article>
+                <article class="content-card reveal" data-delay="240">
+                    <h3>What if Tkinter is missing?</h3>
+                    <p>Install the appropriate package for your distribution (<code>python3-tk</code> on Debian/Ubuntu, <code>tk</code> on Arch/Fedora). Alternatively run <code>python app.py --nogui</code> for console mode.</p>
+                </article>
+                <article class="content-card reveal" data-delay="360">
+                    <h3>How do I deal with proxy issues?</h3>
+                    <p>Ensure SOCKS endpoints are reachable and authenticated. The Proxy Pool panel highlights unhealthy nodes; remove failing endpoints or allow cooldowns to expire before reintroducing them.</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading reveal">
+                <span class="eyebrow">Troubleshooting highlights</span>
+                <h2>Resolve the most common stumbling blocks quickly.</h2>
+                <p>These points are lifted directly from the project&rsquo;s troubleshooting section.</p>
+            </div>
+            <div class="content-grid">
+                <article class="content-card reveal" data-delay="0">
+                    <h3>Permission denied while writing output</h3>
+                    <p>Pick an output directory you control from the GUI settings or run the process under an account with write access.</p>
+                </article>
+                <article class="content-card reveal" data-delay="120">
+                    <h3>Proxy pool never becomes healthy</h3>
+                    <p>Confirm VPN connectivity and reachability of the SOCKS5 list. Remove failing entries until the pool stabilises.</p>
+                </article>
+                <article class="content-card reveal" data-delay="240">
+                    <h3>False positives or empty MOTDs</h3>
+                    <p>Install <code>mcstatus</code> for richer handshake parsing and <code>python-nmap</code> to corroborate banners before you classify a host as active.</p>
+                </article>
+                <article class="content-card reveal" data-delay="360">
+                    <h3>Need to audit usage</h3>
+                    <p>Review <code>README.md</code> and commit history for updates to ethical guidance. Document your scan settings and approvals for internal audits.</p>
+                </article>
+            </div>
+            <p class="section-note">Nothing on this page replaces legal advice. Consult counsel if you are unsure whether a scan is authorised in your jurisdiction.</p>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="footer-content">
+            <div>
+                <strong>Minecraft Server Finder</strong>
+                <p>MIT licensed. Built for defenders, explorers, and curious administrators.</p>
+            </div>
+            <div class="footer-links">
+                <a href="index.html">Home</a>
+                <a href="features.html">Features</a>
+                <a href="architecture.html">How It Works</a>
+                <a href="usage.html">Usage</a>
+                <a href="ethics.html">Ethics</a>
+                <a href="https://github.com/braydos-h/Minecraft-Server-Finder" target="_blank" rel="noopener">GitHub</a>
+                <a href="https://github.com/braydos-h/Minecraft-Server-Finder/blob/main/README.md" target="_blank" rel="noopener">Documentation</a>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1184608428806759" crossorigin="anonymous"></script>
 </head>
 <body>
     <div class="noise-layer"></div>
@@ -18,70 +19,68 @@
 
     <header class="site-header">
         <nav class="nav">
-            <a class="logo" href="#top">Minecraft Server Finder</a>
+            <a class="logo" href="index.html">Minecraft Server Finder</a>
             <div class="nav-links">
-                <a href="#highlights">Highlights</a>
-                <a href="#architecture">Architecture</a>
-                <a href="#quick-start">Quick Start</a>
-                <a href="#ethics">Ethics</a>
+                <a href="index.html">Home</a>
+                <a href="features.html">Features</a>
+                <a href="architecture.html">How It Works</a>
+                <a href="usage.html">Usage Guides</a>
+                <a href="ethics.html">Ethics & FAQ</a>
             </div>
         </nav>
         <section class="hero reveal" id="top">
             <div class="hero-content">
-                <span class="eyebrow">IPv4 Intelligence Scanner</span>
-                <h1>Discover Minecraft servers without guesswork.</h1>
-                <p>A multi-threaded, protocol-aware toolkit that sweeps massive address spaces, rotates proxies, parses MOTDs, and keeps your findings organised.</p>
+                <span class="eyebrow">Open source IPv4 scanner</span>
+                <h1>Map Minecraft servers with production-grade tooling.</h1>
+                <p>Minecraft Server Finder couples a Tkinter GUI and a console engine with ThreadPoolExecutor-driven workers, SOCKS5 proxy rotation, and structured persistence so sweeps stay fast, reliable, and auditable.</p>
                 <div class="hero-actions">
                     <a class="btn primary" href="https://github.com/braydos-h/Minecraft-Server-Finder" target="_blank" rel="noopener">View on GitHub</a>
-                    <a class="btn secondary" href="#quick-start">Launch Guide</a>
+                    <a class="btn secondary" href="features.html">Explore Features</a>
                 </div>
                 <ul class="hero-badges">
-                    <li>ThreadPool powered</li>
-                    <li>SOCKS5 Rotation</li>
-                    <li>GUI + Headless</li>
-                    <li>PyInstaller ready</li>
+                    <li>ThreadPoolExecutor core</li>
+                    <li>SOCKS5 proxy pool</li>
+                    <li>Tkinter GUI or --nogui</li>
+                    <li>MIT licensed</li>
                 </ul>
             </div>
             <div class="hero-visual">
-                <div class="grid-card">
+                <div class="grid-card" role="figure" aria-label="Sample scan telemetry">
                     <div class="grid-header">
                         <span class="status-dot"></span>
-                        <span class="grid-title">Live Scan</span>
-                        <span class="grid-rate">152 hosts/s</span>
+                        <span class="grid-title">Sample Telemetry</span>
+                        <span class="grid-rate">Console feed</span>
+                        <span></span>
                     </div>
                     <div class="grid-body">
                         <div class="scan-row">
-                            <span class="scan-ip">104.19.89.21:25565</span>
-                            <span class="scan-ping good">43 ms</span>
-                            <span class="scan-version">1.20.4</span>
+                            <span class="scan-ip">51.222.25.11:25565</span>
+                            <span class="scan-ping great">16 ms</span>
+                            <span class="scan-version">1.20.6</span>
                         </div>
                         <div class="scan-row">
                             <span class="scan-ip">172.67.72.44:25565</span>
-                            <span class="scan-ping avg">97 ms</span>
+                            <span class="scan-ping good">48 ms</span>
                             <span class="scan-version">1.19.4</span>
-                        </div>
-                        <div class="scan-row">
-                            <span class="scan-ip">198.51.100.47:25565</span>
-                            <span class="scan-ping great">12 ms</span>
-                            <span class="scan-version">1.21.x</span>
                         </div>
                         <div class="scan-row pending">
                             <span class="scan-ip">203.0.113.140</span>
-                            <span class="scan-ping">probing…</span>
-                            <span class="scan-version">—</span>
+                            <span class="scan-ping">probing...</span>
+                            <span class="scan-version">pending</span>
                         </div>
                         <div class="scan-row offline">
                             <span class="scan-ip">8.8.8.8:25565</span>
                             <span class="scan-ping">timeout</span>
-                            <span class="scan-version">—</span>
+                            <span class="scan-version">n/a</span>
                         </div>
                     </div>
                     <div class="grid-footer">
-                        <span class="metric-label">Active Workers</span>
-                        <span class="metric-value">150</span>
-                        <span class="metric-label">Proxy Health</span>
-                        <span class="metric-value healthy">98%</span>
+                        <span class="metric-label">Workers</span>
+                        <span class="metric-value">150 (default)</span>
+                        <span class="metric-label">Proxy health</span>
+                        <span class="metric-value healthy">Live scoring</span>
                     </div>
+                    <p class="grid-disclaimer">Telemetry shown for illustration. Configure ranges, workers, and proxies in app.</p>
                 </div>
             </div>
         </section>
@@ -90,104 +89,112 @@
     <main>
         <section class="section" id="highlights">
             <div class="section-heading reveal">
-                <span class="eyebrow">Why teams pick it</span>
-                <h2>High-throughput scanning with deep Minecraft context.</h2>
-                <p>Born from real-world sweeps that demanded reliability, every subsystem is tuned for signal over noise.</p>
+                <span class="eyebrow">Why teams adopt it</span>
+                <h2>High-throughput Minecraft discovery without sacrificing signal.</h2>
+                <p>Every subsystem in Minecraft Server Finder originates from real-world sweeps where reliability, context, and repeatability mattered.</p>
             </div>
             <div class="feature-grid">
                 <article class="feature-card reveal" data-delay="0">
                     <div class="feature-icon">
-                        <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 46h44v6H10zM10 12h44v6H10zM10 29h44v6H10z" /></svg>
+                        <svg viewBox="0 0 32 32" aria-hidden="true">
+                            <path d="M6 6h20v4H6zM6 22h20v4H6zM6 14h12v4H6z"></path>
+                        </svg>
                     </div>
-                    <h3>Ludicrous throughput</h3>
-                    <p>ThreadPool executors, bounded queues, and adaptive backpressure keep 150+ workers blasting through IPv4 without overwhelming your uplink.</p>
+                    <h3>Deterministic address coverage</h3>
+                    <p><code>mcsmartscan.utils.permuted_index_generator</code> reshuffles IPv4 ranges so every host is visited exactly once without hotspots.</p>
                 </article>
-                <article class="feature-card reveal" data-delay="60">
+                <article class="feature-card reveal" data-delay="80">
                     <div class="feature-icon">
-                        <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 8l20 12v24L32 56 12 44V20zM22 36l10 6 10-6v-8l-10-6-10 6z"/></svg>
+                        <svg viewBox="0 0 32 32" aria-hidden="true">
+                            <path d="M8 6h8l10 10-8 8-10-10zM6 24l4-4 6 6H6z"></path>
+                        </svg>
                     </div>
-                    <h3>Protocol-aware detection</h3>
-                    <p>Performs proper Java handshake, extracts MOTD, version hints, player counts, and gracefully toggles to <code>mcstatus</code> for richer telemetry.</p>
+                    <h3>Proxy-aware throughput</h3>
+                    <p><code>ProxyPool</code> tracks SOCKS5 health, enforces cooldowns, and pairs neatly with the optional <code>MullvadManager</code> for VPN rotation.</p>
                 </article>
-                <article class="feature-card reveal" data-delay="120">
+                <article class="feature-card reveal" data-delay="160">
                     <div class="feature-icon">
-                        <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M12 18h40v4H12zM12 30h40v4H12zM12 42h40v4H12z"/></svg>
+                        <svg viewBox="0 0 32 32" aria-hidden="true">
+                            <path d="M6 8h20v4H6zM6 14h12v4H6zM6 20h16v4H6z"></path>
+                        </svg>
                     </div>
-                    <h3>Proxy-first resilience</h3>
-                    <p>Battle-tested SOCKS5 rotation with cooldown tracking, exponential backoff, and live health metrics so your long scans never stall.</p>
-                </article>
-                <article class="feature-card reveal" data-delay="180">
-                    <div class="feature-icon">
-                        <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M12 12h40v40H12zM20 20v24h24V20z"/></svg>
-                    </div>
-                    <h3>Mullvad automation ready</h3>
-                    <p>Optional Mullvad CLI integration cycles VPN exits on schedule, keeping proxy pools fresh during multi-hour campaigns.</p>
+                    <h3>Protocol-aware results</h3>
+                    <p>Java status handshakes expose version hints, MOTDs, and latency. Optional <code>mcstatus</code> and <code>python-nmap</code> add deeper context.</p>
                 </article>
                 <article class="feature-card reveal" data-delay="240">
                     <div class="feature-icon">
-                        <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M12 16h40v4H12zM12 24h24v4H12zM12 32h32v4H12zM12 40h18v4H12z"/></svg>
+                        <svg viewBox="0 0 32 32" aria-hidden="true">
+                            <path d="M10 26V6l12 10z"></path>
+                        </svg>
                     </div>
-                    <h3>Persistent intelligence</h3>
-                    <p>StorageManager writes confirmed hits, open ports, and GUI state to shareable artefacts you can sync, diff, and revisit later.</p>
+                    <h3>Operator-centric UI</h3>
+                    <p>Launch the Tkinter GUI for visual controls or run <code>python app.py --nogui</code> for a console flow in terminals and automation.</p>
                 </article>
-                <article class="feature-card reveal" data-delay="300">
+                <article class="feature-card reveal" data-delay="320">
                     <div class="feature-icon">
-                        <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M16 16h32v32H16zM24 24v16h16V24z"/></svg>
+                        <svg viewBox="0 0 32 32" aria-hidden="true">
+                            <path d="M6 6h20v12H6zM10 10v4h12v-4zM8 22h16v4H8z"></path>
+                        </svg>
                     </div>
-                    <h3>GUI or headless</h3>
-                    <p>Launch the polished Tkinter interface for visual oversight or run purely from the CLI with rich logging and configurable flags.</p>
+                    <h3>Structured persistence</h3>
+                    <p><code>StorageManager</code> writes confirmed servers, open port leads, and GUI state to desktop-friendly files for later review.</p>
+                </article>
+                <article class="feature-card reveal" data-delay="400">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 32 32" aria-hidden="true">
+                            <path d="M4 8h24v4H4zM4 14h18v4H4zM4 20h12v4H4z"></path>
+                        </svg>
+                    </div>
+                    <h3>Automatable releases</h3>
+                    <p>Use <code>pyinstaller.ps1</code> for a reproducible Windows build and lean on GitHub Actions workflows for CI-tested exports.</p>
                 </article>
             </div>
         </section>
 
-        <section class="section split" id="architecture">
+        <section class="section split" id="architecture-overview">
             <div class="section-heading reveal">
-                <span class="eyebrow">Under the hood</span>
-                <h2>Modular by design. Embed the engine anywhere.</h2>
-                <p>The scanning core lives in <code>mcsmartscan</code>, ready for reuse in your own automations or security pipelines.</p>
+                <span class="eyebrow">Pipeline preview</span>
+                <h2>Coordinated workers, resilient proxies, reliable storage.</h2>
+                <p>This is the same pipeline the GUI, console shim, and automated jobs all ride on.</p>
             </div>
             <div class="architecture-timeline">
-                <div class="timeline-item reveal">
+                <div class="timeline-item reveal" data-delay="0">
                     <span class="timeline-dot"></span>
-                    <h3>mcsmartscan.utils</h3>
-                    <p>Feistel-based permutation generators reshuffle large IPv4 ranges while guaranteeing full coverage without duplicates.</p>
+                    <h3>Address planning</h3>
+                    <p><code>ip_range_generator</code> and <code>permuted_index_generator</code> prepare balanced work queues across massive IPv4 spans.</p>
                 </div>
-                <div class="timeline-item reveal" data-delay="80">
+                <div class="timeline-item reveal" data-delay="120">
                     <span class="timeline-dot"></span>
-                    <h3>mcsmartscan.proxy</h3>
-                    <p>ProxyPool manages SOCKS5 endpoints, health scoring, cooldown enforcement, and handshake fallbacks when targets misbehave.</p>
-                </div>
-                <div class="timeline-item reveal" data-delay="160">
-                    <span class="timeline-dot"></span>
-                    <h3>mcsmartscan.storage</h3>
-                    <p>Desktop-aware persistence routes outputs to user-friendly destinations and keeps GUI session state intact between runs.</p>
+                    <h3>Parallel probes</h3>
+                    <p><code>ThreadPoolExecutor</code> workers open sockets, negotiate handshakes, and track failure ratios to self-throttle.</p>
                 </div>
                 <div class="timeline-item reveal" data-delay="240">
                     <span class="timeline-dot"></span>
-                    <h3>mcsmartscan.vpn</h3>
-                    <p>MullvadManager talks to the Mullvad CLI/SDK, rotates exits, and surfaces telemetry hooks so you can monitor VPN freshness.</p>
+                    <h3>Proxy arbitration</h3>
+                    <p><code>ProxyPool</code> scores SOCKS5 endpoints while <code>MullvadManager</code> can rotate VPN exits to keep exit IPs fresh.</p>
                 </div>
-                <div class="timeline-item reveal" data-delay="320">
+                <div class="timeline-item reveal" data-delay="360">
                     <span class="timeline-dot"></span>
-                    <h3>app.py orchestrator</h3>
-                    <p>Wires everything together with Tkinter views, console fallbacks, worker pools, proxy telemetry, and optional <code>mcstatus</code> probes.</p>
+                    <h3>Result persistence</h3>
+                    <p><code>StorageManager</code> writes text and JSON artefacts so you can resume sessions or feed results into other tooling.</p>
                 </div>
             </div>
+            <p class="section-note">Need the full breakdown? Head to <a href="architecture.html">How It Works</a> for diagrams and module-level references.</p>
         </section>
 
         <section class="section quick-start" id="quick-start">
             <div class="section-heading reveal">
-                <span class="eyebrow">Five minute launch</span>
-                <h2>Get scanning in four easy commands.</h2>
-                <p>Works on Windows, macOS, and Linux. Bring your own virtualenv, or ship the PyInstaller build straight to teammates.</p>
+                <span class="eyebrow">Get scanning</span>
+                <h2>Spin up the toolkit in minutes.</h2>
+                <p>Everything ships in the repository. Only Python 3.10+ is required for the default experience.</p>
             </div>
             <div class="qs-content">
                 <div class="qs-steps reveal">
                     <ol>
-                        <li>Clone the repo &amp; enter the directory</li>
-                        <li>Create a virtual environment (recommended)</li>
-                        <li>Install core + optional dependencies</li>
-                        <li>Launch the GUI or run headless</li>
+                        <li>Clone the repository and enter the directory.</li>
+                        <li>Create and activate a virtual environment (recommended).</li>
+                        <li>Install the required dependencies from <code>requirements.txt</code>.</li>
+                        <li>Launch the Tkinter GUI or force console mode with <code>--nogui</code>.</li>
                     </ol>
                 </div>
                 <div class="qs-code reveal" data-delay="120">
@@ -196,64 +203,102 @@ cd Minecraft-Server-Finder
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 # macOS/Linux: source .venv/bin/activate
+pip install --upgrade pip
 pip install -r requirements.txt
-python app.py  # GUI mode
-# or: python app.py --start 40.0.0.0 --end 45.255.255.255 --headless</code></pre>
+python app.py
+# or: python app.py --nogui</code></pre>
                 </div>
             </div>
             <div class="qs-footer reveal" data-delay="200">
                 <div class="qs-card">
-                    <h3>Build an executable</h3>
-                    <p>Fire <code>pyinstaller.ps1</code> to generate a Windows-friendly bundle. GitHub Actions mirrors the same flow for release automation.</p>
+                    <h3>Bundle for Windows</h3>
+                    <p>Run <code>pyinstaller.ps1</code> to execute the maintained build script. It mirrors the GitHub Actions workflow used for releases.</p>
                 </div>
                 <div class="qs-card">
-                    <h3>Automate the install</h3>
-                    <p>Use <code>install_system.bat</code> for rapid workstation setup. Optional extras like <code>mcstatus</code> and <code>python-nmap</code> enhance detection.</p>
+                    <h3>Automate setup</h3>
+                    <p><code>install_system.bat</code> installs Python prerequisites system-wide so workstations are ready for GUI or console scanning.</p>
                 </div>
+            </div>
+            <p class="section-note">Enhance enrichment with optional extras such as <code>mcstatus</code>, <code>python-nmap</code>, <code>psutil</code>, and Mullvad CLI bindings.</p>
+        </section>
+
+        <section class="section" id="deep-dives">
+            <div class="section-heading reveal">
+                <span class="eyebrow">Deep dives</span>
+                <h2>Pick a guide that matches your next task.</h2>
+                <p>Each subpage expands on the highlights with hands-on steps, diagrams, and references to the exact modules in the codebase.</p>
+            </div>
+            <div class="link-grid">
+                <a class="link-card reveal" data-delay="0" href="features.html">
+                    <strong>Feature tour</strong>
+                    <p>Dive into every scanning, proxy, storage, and UI capability with pointers into the <code>mcsmartscan</code> package.</p>
+                    <span class="link-label">See features</span>
+                </a>
+                <a class="link-card reveal" data-delay="120" href="architecture.html">
+                    <strong>How the engine runs</strong>
+                    <p>Follow the request pipeline, worker orchestration, and data flow diagrams to understand how scans stay consistent.</p>
+                    <span class="link-label">Inspect architecture</span>
+                </a>
+                <a class="link-card reveal" data-delay="240" href="usage.html">
+                    <strong>Operator playbook</strong>
+                    <p>Step-by-step guidance for GUI operators, console automation, proxy pools, PyInstaller builds, and test workflows.</p>
+                    <span class="link-label">Open guides</span>
+                </a>
+                <a class="link-card reveal" data-delay="360" href="ethics.html">
+                    <strong>Ethics and FAQ</strong>
+                    <p>Stay compliant with legal expectations, rate limiting best practices, and frequently asked questions from the community.</p>
+                    <span class="link-label">Review policy</span>
+                </a>
             </div>
         </section>
 
-        <section class="section metrics">
+        <section class="section metrics" id="facts">
+            <div class="section-heading reveal">
+                <span class="eyebrow">Core facts</span>
+                <h2>Everything here is pulled straight from the repository.</h2>
+                <p>The numbers below reflect defaults in <code>mcsmartscan.constants</code> and behaviours enforced by the runtime.</p>
+            </div>
             <div class="metric-grid">
                 <div class="metric-card reveal">
-                    <span class="metric-number" data-target="512">0</span>
-                    <span class="metric-label">Concurrent sockets tested per minute with defaults</span>
+                    <span class="metric-number" data-target="150">0</span>
+                    <span class="metric-label">Default worker threads orchestrated by the scan loop.</span>
                 </div>
                 <div class="metric-card reveal" data-delay="80">
-                    <span class="metric-number" data-target="98">0</span>
-                    <span class="metric-label">Proxy pool health maintained during 24h sweep</span>
+                    <span class="metric-number" data-target="4">0</span>
+                    <span class="metric-label">Seconds before TCP handshakes time out (tweakable per run).</span>
                 </div>
                 <div class="metric-card reveal" data-delay="160">
                     <span class="metric-number" data-target="3">0</span>
-                    <span class="metric-label">Platforms supported: Windows, macOS, Linux</span>
+                    <span class="metric-label">Desktop OS targets covered in the GitHub Actions matrix.</span>
                 </div>
                 <div class="metric-card reveal" data-delay="240">
-                    <span class="metric-number" data-target="100">0</span>
-                    <span class="metric-label">Percent control retained over storage paths</span>
+                    <span class="metric-number" data-target="3">0</span>
+                    <span class="metric-label">Output artefacts persisted by <code>StorageManager</code> (servers, open ports, saved state).</span>
                 </div>
             </div>
         </section>
 
-        <section class="section ethics" id="ethics">
+        <section class="section ethics" id="responsible-use">
             <div class="section-heading reveal">
-                <span class="eyebrow">Safety first</span>
-                <h2>Respect the internet. Scan responsibly.</h2>
-                <p>Only target infrastructure you own or have explicit permission to test. Minecraft Server Finder is a powerful tool&mdash;use it responsibly.</p>
+                <span class="eyebrow">Responsible scanning</span>
+                <h2>Respect the rules of engagement.</h2>
+                <p>The tool is powerful, but it is only appropriate where you have clear permission to test.</p>
             </div>
             <div class="ethics-grid">
                 <div class="ethics-card reveal">
-                    <h3>Permission is paramount</h3>
-                    <p>Unauthorised scanning can breach local laws, ISP policies, and provider terms of service. Always secure written approval.</p>
+                    <h3>Operate with consent</h3>
+                    <p>Only sweep infrastructure you own or where written authorisation is in hand. Unauthorised scanning can violate laws and provider policies.</p>
                 </div>
                 <div class="ethics-card reveal" data-delay="80">
-                    <h3>Throttle thoughtfully</h3>
-                    <p>Adjust worker counts, timeouts, and proxy pools to respect upstream rate limits, especially when testing shared infrastructure.</p>
+                    <h3>Balance performance and load</h3>
+                    <p>Adjust worker counts, proxy pools, and timeouts when testing shared networks so you remain within acceptable use policies.</p>
                 </div>
                 <div class="ethics-card reveal" data-delay="160">
-                    <h3>Handle findings with care</h3>
-                    <p>Confirmed servers may expose sensitive MOTDs or player data. Share responsibly and coordinate disclosure with server operators.</p>
+                    <h3>Handle findings carefully</h3>
+                    <p>Results can surface sensitive MOTDs or player lists. Coordinate disclosure and respect privacy expectations from server operators.</p>
                 </div>
             </div>
+            <p class="section-note">Review the complete guidelines and FAQ on <a href="ethics.html">Ethics & FAQ</a> before running broad scans.</p>
         </section>
     </main>
 
@@ -261,12 +306,16 @@ python app.py  # GUI mode
         <div class="footer-content">
             <div>
                 <strong>Minecraft Server Finder</strong>
-                <p>MIT licensed &middot; Built for explorers, defenders, and curious admins.</p>
+                <p>MIT licensed. Built for defenders, explorers, and curious administrators.</p>
             </div>
             <div class="footer-links">
+                <a href="index.html">Home</a>
+                <a href="features.html">Features</a>
+                <a href="architecture.html">How It Works</a>
+                <a href="usage.html">Usage</a>
+                <a href="ethics.html">Ethics</a>
                 <a href="https://github.com/braydos-h/Minecraft-Server-Finder" target="_blank" rel="noopener">GitHub</a>
                 <a href="https://github.com/braydos-h/Minecraft-Server-Finder/blob/main/README.md" target="_blank" rel="noopener">Documentation</a>
-                <a href="https://github.com/braydos-h/Minecraft-Server-Finder/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
             </div>
         </div>
     </footer>

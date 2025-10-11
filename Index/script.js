@@ -2,8 +2,25 @@ document.addEventListener("DOMContentLoaded", () => {
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const reveals = document.querySelectorAll(".reveal");
     const nav = document.querySelector(".nav");
+    const navLinks = document.querySelectorAll(".nav-links a[href]");
     const counters = document.querySelectorAll(".metric-number[data-target]");
     const counterState = new WeakMap();
+
+    if (navLinks.length) {
+        const rawPath = window.location.pathname.split("/").pop();
+        const currentPage = rawPath && rawPath.length > 0 ? rawPath : "index.html";
+
+        navLinks.forEach(link => {
+            const href = link.getAttribute("href") || "";
+            const normalized = href.split("#")[0].replace(/^\.\//, "") || "index.html";
+
+            if (normalized === currentPage) {
+                link.dataset.active = "true";
+            } else if (normalized === "index.html" && currentPage === "") {
+                link.dataset.active = "true";
+            }
+        });
+    }
 
     if (!prefersReducedMotion && "IntersectionObserver" in window) {
         const observer = new IntersectionObserver(
