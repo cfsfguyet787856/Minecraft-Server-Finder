@@ -1,10 +1,9 @@
 # ============================== SECTION 1: IMPORTS / CONSTANTS / GLOBALS (START) ==============================
-import os, sys, time, json, math, socket, threading, queue, subprocess, platform, re, hashlib, random, shutil, logging
+import os, sys, time, json, math, socket, threading, queue, subprocess, platform, re, hashlib, random, shutil
 from datetime import datetime
 from ipaddress import IPv4Address
 from concurrent.futures import ThreadPoolExecutor
 from collections import deque
-from typing import List
 from pathlib import Path
 
 from mcsmartscan.constants import (
@@ -22,10 +21,6 @@ from mcsmartscan.constants import (
     PROTOCOL_CANDIDATES,
     PROTOCOL_TO_VERSION_HINT,
     SAVED_SERVERS_FILE,
-    PROXY_IO_THREADS,
-    PROXY_LOG_CAPACITY,
-    PROXY_LOG_DEBOUNCE_MS,
-    PROXY_UI_REFRESH_MS,
     ping_to_bars,
 )
 from mcsmartscan.storage import StorageManager
@@ -40,8 +35,6 @@ from mcsmartscan.proxy import (
     ProxyHandshakeError,
     ProxyPool,
     ProxyTargetError,
-    emit_event,
-    get_event_buffer,
 )
 
 try:
@@ -64,9 +57,6 @@ try:
     _nmap_available = True
 except Exception:
     _nmap_available = False
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.NullHandler())
 
 _gui_available = True
 try:
@@ -1060,11 +1050,6 @@ class ScannerAppGUI:
         if pool:
             self.proxy_pool = pool
             self._proxy_enabled = True
-            try:
-                self.proxy_pool.prepare_for_run()
-                self._uiq_put(("proxy-log", "[PROXY] starting initial health probes...", "info"))
-            except Exception:
-                self._uiq_put(("proxy-log", "[PROXY] failed to start initial health probes", "warn"))
             self._uiq_put(("log", f"[PROXY] Loaded {pool.total} Mullvad proxy endpoints.", "info"))
         else:
             self.proxy_pool = None
@@ -1711,38 +1696,6 @@ class ScannerAppGUI:
         self.status.set("Stopped")
         self._save_current_blob(immediate=True)
         self._ctl_async("[SCAN] Stopped")
-
-    def on_close(self):
-        """Gracefully unwind background activity before closing the window."""
-        if getattr(self, "_closing", False):
-            return
-        self._closing = True
-        try:
-            if self.scanning:
-                self.stop_scan()
-            else:
-                self._stop.set()
-                self._pause.clear()
-                self._save_current_blob(immediate=True)
-        except Exception:
-            pass
-        try:
-            self.vpn_manager.stop()
-        except Exception:
-            pass
-        try:
-            if self.proxy_pool:
-                self.proxy_pool.shutdown(wait=False)
-        except Exception:
-            pass
-        try:
-            self.root.quit()
-        except Exception:
-            pass
-        try:
-            self.root.destroy()
-        except Exception:
-            pass
 
     def _submitter(self, ip_iter, timeout):
         try:
@@ -2498,32 +2451,6 @@ class ScannerAppGUI:
         elif kind == "target-failure":
             error = event.get("error") or "target failure"
             self._proxy_log(f"[PROXY] {label} target error: {error}", "warn")
-        elif kind == "health":
-            ok = bool(event.get("ok"))
-            latency = event.get("latency_ms")
-            exit_ip = event.get("exit_ip")
-            country = event.get("country")
-            server_type = event.get("server_type")
-            pieces = []
-            if latency is not None:
-                pieces.append(f"{latency:.1f} ms")
-            if country:
-                pieces.append(str(country))
-            if server_type:
-                pieces.append(str(server_type))
-            if exit_ip:
-                pieces.append(str(exit_ip))
-            detail = " | ".join(pieces) if pieces else "no telemetry"
-            if ok:
-                self._proxy_log(f"[HEALTH] {label} OK ({detail})", "success")
-                if latency is not None:
-                    self.var_proxy_health_hint.set(f"{label} health OK {latency:.1f} ms")
-                else:
-                    self.var_proxy_health_hint.set(f"{label} health OK")
-            else:
-                error = event.get("error") or "health check failed"
-                self._proxy_log(f"[HEALTH] {label} failed ({error})", "error")
-                self.var_proxy_health_hint.set(f"{label} health error")
         elif kind == "success":
             latency = event.get("latency_ms")
             if latency is not None:
@@ -2577,21 +2504,6 @@ class ScannerAppGUI:
                 and (item.get("disabled") or 0) <= 0.05
             )
         )
-        healthy_count = sum(
-            1
-            for item in snapshot
-            if item.get("health_ok") and item.get("health_fresh")
-        )
-        unhealthy_count = sum(
-            1
-            for item in snapshot
-            if item.get("health_fresh") and not item.get("health_ok")
-        )
-        stale_count = sum(
-            1
-            for item in snapshot
-            if item.get("health_last_probe_ts") and not item.get("health_fresh")
-        )
         idle = max(0, total - in_use - cooling - quarantine_count - disabled_count)
         summary_parts = [f"Proxies {total}", f"in use {in_use}"]
         if disabled_count:
@@ -2600,12 +2512,6 @@ class ScannerAppGUI:
             summary_parts.append(f"quarantine {quarantine_count}")
         if cooling:
             summary_parts.append(f"cooling {cooling}")
-        if healthy_count:
-            summary_parts.append(f"health ok {healthy_count}")
-        if unhealthy_count:
-            summary_parts.append(f"health fail {unhealthy_count}")
-        if stale_count:
-            summary_parts.append(f"health stale {stale_count}")
         summary_parts.append(f"idle {idle}")
         summary = " | ".join(summary_parts)
         if not self._proxy_enabled:
@@ -2637,24 +2543,11 @@ class ScannerAppGUI:
                 status = f"Cooling {cooldown:.1f}s"
             else:
                 status = "Idle"
-            health_label = None
-            health_fresh = entry.get("health_fresh")
-            health_ok = entry.get("health_ok")
-            if health_fresh:
-                health_label = "health ok" if health_ok else "health fail"
-            elif entry.get("health_last_probe_ts"):
-                health_label = "health stale"
-            if status == "Idle" and health_label:
-                status = health_label.title()
-            elif health_label:
-                status = f"{status} ({health_label})"
             last_stage = entry.get("last_stage")
             last_error = entry.get("last_error")
             if last_error and not in_use_flag:
                 status = f"{status} ({last_stage or 'error'})"
             latency = entry.get("last_latency_ms")
-            if latency is None:
-                latency = entry.get("health_latency_ms")
             latency_str = f"{latency:.1f}" if latency is not None else "-"
             self.proxy_tree.insert(
                 "",
@@ -3380,7 +3273,6 @@ def main():
         try:
             root = tk.Tk()
             app = ScannerAppGUI(root)
-            root.protocol("WM_DELETE_WINDOW", app.on_close)
 
             # Ensure loops run
             try: root.after(0, app._pump_ui)
