@@ -65,6 +65,20 @@ try:
 except Exception:
     _gui_available = False
 
+
+def _resolve_resource_path(*relative_parts: str) -> Path:
+    """Return an absolute path for bundled resources.
+
+    When the application is packaged with PyInstaller the files are extracted
+    to a temporary directory exposed via ``sys._MEIPASS``. During normal
+    development ``__file__`` points at the repository root. This helper keeps
+    both execution environments working without scattering conditional logic
+    throughout the code base.
+    """
+
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    return base.joinpath(*relative_parts)
+
 _PING_TIME_RE = re.compile(r"time[=<]\s*(\d+(?:\.\d+)?)\s*ms", re.IGNORECASE)
 _PING_TTL_RE = re.compile(r"\bttl[=\s:]\s*\d+", re.IGNORECASE)
 
@@ -1025,11 +1039,11 @@ class ScannerAppGUI:
         """Load Mullvad proxy endpoints and attach health callback."""
         path = None
         try:
-            path = Path(__file__).resolve().parent / "mcsmartscan" / "mullvadproxyips.txt"
+            path = _resolve_resource_path("mcsmartscan", "mullvadproxyips.txt")
         except Exception:
-            pass
+            path = None
         pool = None
-        if path is not None:
+        if path is not None and path.exists():
             pool = ProxyPool.from_file(path, default_port=1080, event_callback=self._handle_proxy_event)
             if pool.total <= 0:
                 pool = None
@@ -1041,7 +1055,10 @@ class ScannerAppGUI:
             self.proxy_pool = None
             self._proxy_enabled = False
             if path:
-                self._uiq_put(("log", f"[PROXY] No proxies found at {path}", "warn"))
+                if path.exists():
+                    self._uiq_put(("log", f"[PROXY] No proxies found at {path}", "warn"))
+                else:
+                    self._uiq_put(("log", f"[PROXY] Proxy list missing at {path}", "warn"))
             else:
                 self._uiq_put(("log", "[PROXY] Failed to resolve proxy list path.", "warn"))
 

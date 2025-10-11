@@ -89,6 +89,46 @@ pip install -r requirements.txt
 > can install only the libraries you need. Feel free to edit
 > `requirements.txt` to match the features you plan to use.
 
+## Windows executable builds
+
+The repository bundles a ready-to-use
+[`PyInstaller`](https://pyinstaller.org/en/stable/) specification file that
+packages the entire application—including the bundled Mullvad proxy list—into a
+single Windows executable. This makes it easy to distribute the scanner without
+requiring a local Python runtime.
+
+### Manual build steps
+
+1. Install the dependencies listed in `requirements.txt` along with
+   `pyinstaller` (running the commands from an elevated PowerShell prompt is
+   recommended):
+
+   ```powershell
+   python -m pip install --upgrade pip
+   pip install -r requirements.txt
+   pip install pyinstaller
+   ```
+
+2. Invoke PyInstaller with the bundled spec file to create a standalone
+   executable:
+
+   ```powershell
+   pyinstaller --clean --noconfirm minecraft_server_finder.spec
+   ```
+
+   The resulting `MinecraftServerFinder.exe` binary is written to the `dist`
+   directory. The build automatically embeds `mcsmartscan/mullvadproxyips.txt`
+   so the packaged application retains the default Mullvad proxy pool.
+
+### Automated releases
+
+Tagging the repository with a version that starts with `v` (for example,
+`v1.2.0`) triggers the **Build Windows Release** GitHub Actions workflow. The
+pipeline builds the Windows executable on `windows-latest`, uploads it as a
+workflow artifact and publishes a GitHub release with the generated `.exe`
+attached. You can also launch the workflow manually from the Actions tab to
+produce ad-hoc builds without creating a release.
+
 ### Manual installation
 
 If you prefer to install packages selectively, the key optional helpers are:
