@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How It Works • Minecraft Server Finder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1184608428806759" crossorigin="anonymous"></script>
+</head>
+<body>
+    <div class="noise-layer"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+
+    <header class="site-header">
+        <nav class="nav">
+            <a class="logo" href="index.html">Minecraft Server Finder</a>
+            <div class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="features.html">Features</a>
+                <a href="architecture.html">How It Works</a>
+                <a href="usage.html">Usage Guides</a>
+                <a href="ethics.html">Ethics & FAQ</a>
+            </div>
+        </nav>
+        <section class="page-hero reveal">
+            <span class="eyebrow">Engine internals</span>
+            <h1>The Minecraft Server Finder pipeline from input to export.</h1>
+            <p>This is a guided tour of the orchestration logic inside <code>app.py</code> and the <code>mcsmartscan</code> package, so you can reason about performance, safety, and extension points.</p>
+        </section>
+    </header>
+
+    <main>
+        <section class="section">
+            <div class="section-heading reveal">
+                <span class="eyebrow">Runtime flow</span>
+                <h2>Five pillars coordinate every sweep.</h2>
+                <p>GUI and console launches call the same functions; only the presentation layer changes.</p>
+            </div>
+            <div class="architecture-timeline">
+                <div class="timeline-item reveal" data-delay="0">
+                    <span class="timeline-dot"></span>
+                    <h3>1. Configuration ingestion</h3>
+                    <p><code>ScannerAppGUI</code> (Tkinter) or the console shim collects ranges, port lists, workers, proxies, and Mullvad toggles. Defaults come from <code>mcsmartscan.constants</code>.</p>
+                </div>
+                <div class="timeline-item reveal" data-delay="120">
+                    <span class="timeline-dot"></span>
+                    <h3>2. Work distribution</h3>
+                    <p><code>ip_range_generator</code> expands CIDRs/start-end pairs. <code>permuted_index_generator</code> shuffles work deterministically before pushing addresses into a bounded queue.</p>
+                </div>
+                <div class="timeline-item reveal" data-delay="240">
+                    <span class="timeline-dot"></span>
+                    <h3>3. Connection attempts</h3>
+                    <p><code>ThreadPoolExecutor</code> workers pop targets, dial sockets directly or through <code>ProxyPool</code>, and record latency/failure metrics for adaptive throttling.</p>
+                </div>
+                <div class="timeline-item reveal" data-delay="360">
+                    <span class="timeline-dot"></span>
+                    <h3>4. Validation & enrichment</h3>
+                    <p>Minecraft-specific handshakes confirm services. Optional libraries (<code>mcstatus</code>, <code>python-nmap</code>) enrich MOTDs, banners, and protocol hints.</p>
+                </div>
+                <div class="timeline-item reveal" data-delay="480">
+                    <span class="timeline-dot"></span>
+                    <h3>5. Persistence & UI updates</h3>
+                    <p><code>StorageManager</code> writes artefacts immediately while the GUI table and console logger surface status updates in real time.</p>
+                </div>
+            </div>
+            <p class="section-note">Refer to <code>app.py</code> for the complete orchestration logic and inline comments describing each subsystem hand-off.</p>
+        </section>
+
+        <section class="section">
+            <div class="section-heading reveal">
+                <span class="eyebrow">Module map</span>
+                <h2>Understand what each package is responsible for.</h2>
+                <p>Everything sits inside the repository, so you can audit or extend without hunting external dependencies.</p>
+            </div>
+            <div class="content-grid">
+                <article class="content-card reveal" data-delay="0">
+                    <h3><code>mcsmartscan.utils</code></h3>
+                    <p>Pure functions that normalise inputs and feed work into the scanner.</p>
+                    <ul>
+                        <li><code>ip_range_generator</code> expands IPv4 ranges and CIDR blocks safely.</li>
+                        <li><code>permuted_index_generator</code> provides deterministic, collision-free shuffling.</li>
+                        <li>Helpers like <code>ip_range_size</code> support progress calculations.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="120">
+                    <h3><code>mcsmartscan.proxy</code></h3>
+                    <p>Home of <code>ProxyPool</code> plus custom exceptions for proxy health.</p>
+                    <ul>
+                        <li>Tracks success, failure, and cooldown windows per endpoint.</li>
+                        <li>Raises <code>ProxyAcquireTimeout</code> or <code>ProxyTargetError</code> when providers misbehave.</li>
+                        <li>Integrates with Mullvad or custom VPN managers via callbacks.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="240">
+                    <h3><code>mcsmartscan.vpn</code></h3>
+                    <p>Optional layer that automates Mullvad exit rotation.</p>
+                    <ul>
+                        <li>Validates the Mullvad CLI/API is available before scheduling rotations.</li>
+                        <li>Coordinates timing so proxy health checks and VPN swaps do not collide.</li>
+                        <li>Safe to ignore—if not configured, the scanner defaults to static egress.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="360">
+                    <h3><code>mcsmartscan.storage</code></h3>
+                    <p><code>StorageManager</code> centralises persistence logic and path handling.</p>
+                    <ul>
+                        <li>Auto-detects the Desktop path across Windows, macOS, and Linux.</li>
+                        <li>Writes plain-text leads plus structured JSON for GUI state restoration.</li>
+                        <li>Ensures directories exist before writing, reducing runtime surprises.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="480">
+                    <h3><code>app.py</code></h3>
+                    <p>The orchestration hub that wires it all together.</p>
+                    <ul>
+                        <li>Initialises GUI widgets, binds event handlers, and schedules periodic tasks.</li>
+                        <li>Bootstraps console execution when <code>--nogui</code> is set or Tkinter is unavailable.</li>
+                        <li>Exposes extension hooks such as <code>run_console_scan(app)</code> so advanced users can plug in custom loops.</li>
+                    </ul>
+                </article>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading reveal">
+                <span class="eyebrow">Observability & safety</span>
+                <h2>Instrumentation is built in to keep scans predictable.</h2>
+                <p>Metrics inform decisions about throttling, proxy rotation, and resumability.</p>
+            </div>
+            <div class="content-grid">
+                <article class="content-card reveal" data-delay="0">
+                    <h3>Adaptive throttling</h3>
+                    <p>Workers monitor failure ratios and timeouts, enabling back-off without manual intervention.</p>
+                    <ul>
+                        <li>Progress counters track processed hosts, latency averages, and ping failures.</li>
+                        <li>GUI widgets surface bars and status colours for at-a-glance triage.</li>
+                        <li>Console mode logs the same metrics for long-running headless jobs.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="120">
+                    <h3>Persistence guarantees</h3>
+                    <p>Critical writes occur synchronously so crashes or restarts do not lose confirmed hits.</p>
+                    <ul>
+                        <li>Artefacts flush after each discovery to avoid large, fragile buffers.</li>
+                        <li>Saved GUI state enables pause/resume workflows across sessions.</li>
+                        <li>Storage paths are customisable if you prefer shared volumes or versioned artefacts.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="240">
+                    <h3>Responsible defaults</h3>
+                    <p>The project ships with conservative settings you can adjust once you understand the impact.</p>
+                    <ul>
+                        <li><strong>DEFAULT_TIMEOUT = 4.0</strong> seconds balances reachability with empathy for remote hosts.</li>
+                        <li><strong>DEFAULT_WORKERS = 150</strong> keeps bandwidth requirements reasonable for most connections.</li>
+                        <li>Mullvad cycling and proxy usage are opt-in, avoiding accidental policy breaches.</li>
+                    </ul>
+                </article>
+            </div>
+            <p class="section-note">When extending the scanner, keep the legal and ethical guidelines in mind—see the <a href="ethics.html">Ethics & FAQ</a> page for recommendations.</p>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="footer-content">
+            <div>
+                <strong>Minecraft Server Finder</strong>
+                <p>MIT licensed. Built for defenders, explorers, and curious administrators.</p>
+            </div>
+            <div class="footer-links">
+                <a href="index.html">Home</a>
+                <a href="features.html">Features</a>
+                <a href="architecture.html">How It Works</a>
+                <a href="usage.html">Usage</a>
+                <a href="ethics.html">Ethics</a>
+                <a href="https://github.com/braydos-h/Minecraft-Server-Finder" target="_blank" rel="noopener">GitHub</a>
+                <a href="https://github.com/braydos-h/Minecraft-Server-Finder/blob/main/README.md" target="_blank" rel="noopener">Documentation</a>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

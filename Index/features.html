@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Features • Minecraft Server Finder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1184608428806759" crossorigin="anonymous"></script>
+</head>
+<body>
+    <div class="noise-layer"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+
+    <header class="site-header">
+        <nav class="nav">
+            <a class="logo" href="index.html">Minecraft Server Finder</a>
+            <div class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="features.html">Features</a>
+                <a href="architecture.html">How It Works</a>
+                <a href="usage.html">Usage Guides</a>
+                <a href="ethics.html">Ethics & FAQ</a>
+            </div>
+        </nav>
+        <section class="page-hero reveal">
+            <span class="eyebrow">Feature overview</span>
+            <h1>Capabilities built for high-signal Minecraft reconnaissance.</h1>
+            <p>Every component is documented and shipped in-repo: from the ThreadPoolExecutor-driven scan loop to the proxy pool, Mullvad integration, Tkinter UI, and persistence layer.</p>
+            <div class="hero-actions">
+                <a class="btn primary" href="https://github.com/braydos-h/Minecraft-Server-Finder" target="_blank" rel="noopener">Download from GitHub</a>
+                <a class="btn secondary" href="usage.html">Read usage guides</a>
+            </div>
+        </section>
+    </header>
+
+    <main>
+        <section class="section">
+            <div class="section-heading reveal">
+                <span class="eyebrow">Engine core</span>
+                <h2>Reliable coverage across massive IPv4 ranges.</h2>
+                <p>The scanning engine lives in <code>mcsmartscan</code> and is reused by both the GUI and headless entry points.</p>
+            </div>
+            <div class="content-grid">
+                <article class="content-card reveal" data-delay="0">
+                    <h3>Threaded scan loops</h3>
+                    <p>The engine balances sockets, CPU, and file writes so long sweeps stay responsive.</p>
+                    <ul>
+                        <li><strong>ThreadPoolExecutor</strong> workers consume a bounded queue fed by <code>ip_range_generator</code>.</li>
+                        <li><strong>permuted_index_generator</strong> shuffles targets deterministically to avoid hotspots while guaranteeing coverage.</li>
+                        <li><strong>DEFAULT_WORKERS = 150</strong> (tune from the GUI or programmatically before launching).</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="120">
+                    <h3>Proxy and VPN aware</h3>
+                    <p><code>ProxyPool</code> manages SOCKS5 endpoints so you can distribute traffic or rotate egress IPs.</p>
+                    <ul>
+                        <li>Maintain endpoints in <code>mcsmartscan/mullvadproxyips.txt</code> (one per line, comments allowed).</li>
+                        <li>Cooldown timers quarantine unhealthy proxies and retry on a back-off curve.</li>
+                        <li>Optional <code>MullvadManager</code> hooks into Mullvad&rsquo;s CLI/SDK for automated exit rotation.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="240">
+                    <h3>Protocol enrichment</h3>
+                    <p>Hosts that pass TCP validation receive Minecraft-specific parsing before being classified.</p>
+                    <ul>
+                        <li>Java status handshakes capture protocol version hints, MOTDs, latency, and player counts.</li>
+                        <li><code>mcstatus</code> (optional) unlocks extended parsing for modern servers.</li>
+                        <li><code>python-nmap</code> integration (optional) corroborates suspicious responses with banner data.</li>
+                    </ul>
+                </article>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading reveal">
+                <span class="eyebrow">Operator experience</span>
+                <h2>Work visually or run in fully headless environments.</h2>
+                <p>The UI and console flows ride on the same orchestrator so switching contexts is seamless.</p>
+            </div>
+            <div class="content-grid">
+                <article class="content-card reveal" data-delay="0">
+                    <h3>Tkinter GUI</h3>
+                    <p>Launch with <code>python app.py</code> for a desktop experience.</p>
+                    <ul>
+                        <li>Configure start/end IPs, port lists, worker counts, timeouts, proxy pools, and Mullvad cycling.</li>
+                        <li>Monitor a live results table with latency bars, MOTDs, version hints, and timestamps.</li>
+                        <li>Inspect the Proxy Pool panel for health, lease counts, failure streaks, and cooldown timers.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="120">
+                    <h3>Console / headless mode</h3>
+                    <p>Invoke <code>python app.py --nogui</code> when Tkinter is unavailable or undesirable.</p>
+                    <ul>
+                        <li>Reuses the same scan loop, persistence layer, and proxy logic as the GUI.</li>
+                        <li>Designed for remote servers, containers, and automation pipelines.</li>
+                        <li>Extendable: define <code>run_console_scan(app)</code> or similar hooks in <code>app.py</code> to customise orchestration.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="240">
+                    <h3>Persistence & exports</h3>
+                    <p><code>StorageManager</code> writes artefacts continuously so you can pause and resume confidently.</p>
+                    <ul>
+                        <li>Defaults to the user&rsquo;s Desktop (auto-detected cross-platform).</li>
+                        <li>Exports confirmed servers, open port leads, and GUI session state in human-friendly formats.</li>
+                        <li>Point storage at shared directories to sync findings with teammates or CI runners.</li>
+                    </ul>
+                </article>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading reveal">
+                <span class="eyebrow">Key artefacts</span>
+                <h2>Know exactly what is produced after every sweep.</h2>
+                <p>These files land automatically unless you override the destination path from the GUI or code.</p>
+            </div>
+            <div class="fact-grid">
+                <div class="fact-card reveal" data-delay="0">
+                    <strong>Minecraft_Servers.txt</strong>
+                    <p>Confirmed servers with timestamps, MOTDs, version hints, latency, and player counts.</p>
+                </div>
+                <div class="fact-card reveal" data-delay="80">
+                    <strong>Open_Ports.txt</strong>
+                    <p>Leads that passed TCP checks but failed Minecraft protocol validation for further analysis.</p>
+                </div>
+                <div class="fact-card reveal" data-delay="160">
+                    <strong>saved_servers.json</strong>
+                    <p>Structured GUI state so tables repopulate on restart and long scans resume smoothly.</p>
+                </div>
+                <div class="fact-card reveal" data-delay="240">
+                    <strong>Proxy configuration</strong>
+                    <p>Maintain SOCKS5 endpoints in <code>mcsmartscan/mullvadproxyips.txt</code>; empty the file to disable proxying.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading reveal">
+                <span class="eyebrow">Automation & packaging</span>
+                <h2>Ship the toolkit anywhere your team needs it.</h2>
+                <p>Scripting helpers and CI workflows are already part of the repository.</p>
+            </div>
+            <div class="content-grid">
+                <article class="content-card reveal" data-delay="0">
+                    <h3>PyInstaller bundle</h3>
+                    <p>Run <code>pyinstaller.ps1</code> to invoke the curated build command and generate a Windows executable.</p>
+                    <ul>
+                        <li>Wraps <code>pyinstaller</code> with the maintained <code>minecraft_server_finder.spec</code> recipe.</li>
+                        <li>Bundles proxy lists and the <code>mcsmartscan</code> package for redistribution.</li>
+                        <li>Matches the configuration used in the <em>Build Windows Release</em> GitHub Action.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="120">
+                    <h3>Workstation bootstrap</h3>
+                    <p><code>install_system.bat</code> installs Python prerequisites system-wide for GUI operators.</p>
+                    <ul>
+                        <li>Upgrades <code>pip</code> and installs dependencies from <code>requirements.txt</code>.</li>
+                        <li>Optional extras (<code>mcstatus</code>, <code>python-nmap</code>, <code>psutil</code>) can be added after the base install.</li>
+                        <li>Ideal for labs where you need a consistent environment across multiple desktops.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="240">
+                    <h3>Continuous integration ready</h3>
+                    <p>GitHub Actions workflows (<code>.github/workflows</code>) lint, test, and build the project on every push.</p>
+                    <ul>
+                        <li>Runs the Python application workflow against Windows, macOS, and Linux runners.</li>
+                        <li>Publishes Windows releases automatically when tagged (or triggered manually).</li>
+                        <li>Keep local changes healthy by mirroring the CI steps: <code>pytest</code>, <code>flake8</code>, and the optional packaging flow.</li>
+                    </ul>
+                </article>
+            </div>
+            <p class="section-note">All feature claims are sourced from <code>app.py</code>, the <code>mcsmartscan</code> package, and <code>README.md</code>. Verify changes in code before modifying these docs.</p>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="footer-content">
+            <div>
+                <strong>Minecraft Server Finder</strong>
+                <p>MIT licensed. Built for defenders, explorers, and curious administrators.</p>
+            </div>
+            <div class="footer-links">
+                <a href="index.html">Home</a>
+                <a href="features.html">Features</a>
+                <a href="architecture.html">How It Works</a>
+                <a href="usage.html">Usage</a>
+                <a href="ethics.html">Ethics</a>
+                <a href="https://github.com/braydos-h/Minecraft-Server-Finder" target="_blank" rel="noopener">GitHub</a>
+                <a href="https://github.com/braydos-h/Minecraft-Server-Finder/blob/main/README.md" target="_blank" rel="noopener">Documentation</a>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

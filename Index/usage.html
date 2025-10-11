@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Usage Guides • Minecraft Server Finder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1184608428806759" crossorigin="anonymous"></script>
+</head>
+<body>
+    <div class="noise-layer"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+
+    <header class="site-header">
+        <nav class="nav">
+            <a class="logo" href="index.html">Minecraft Server Finder</a>
+            <div class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="features.html">Features</a>
+                <a href="architecture.html">How It Works</a>
+                <a href="usage.html">Usage Guides</a>
+                <a href="ethics.html">Ethics & FAQ</a>
+            </div>
+        </nav>
+        <section class="page-hero reveal">
+            <span class="eyebrow">Operator handbook</span>
+            <h1>Launch, operate, and package Minecraft Server Finder with confidence.</h1>
+            <p>This guide distills the repository documentation into actionable steps for GUI operators, automation engineers, and release managers.</p>
+        </section>
+    </header>
+
+    <main>
+        <section class="section">
+            <div class="section-heading reveal">
+                <span class="eyebrow">Environment prep</span>
+                <h2>Set up Python and dependencies.</h2>
+                <p>The project targets Python 3.10 or newer. Virtual environments keep installs isolated.</p>
+            </div>
+            <div class="content-grid">
+                <article class="content-card reveal" data-delay="0">
+                    <h3>Clone and install</h3>
+                    <p>Use these commands exactly as they appear in <code>README.md</code>.</p>
+                    <pre><code class="language-bash">git clone https://github.com/braydos-h/Minecraft-Server-Finder.git
+cd Minecraft-Server-Finder
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt</code></pre>
+                </article>
+                <article class="content-card reveal" data-delay="120">
+                    <h3>Optional enrichment</h3>
+                    <p>Install extras to unlock deeper signal analysis:</p>
+                    <ul>
+                        <li><code>pip install mcstatus</code> for richer MOTDs and protocol data.</li>
+                        <li><code>pip install python-nmap</code> to corroborate service banners.</li>
+                        <li><code>pip install psutil</code> to augment GUI system metrics.</li>
+                        <li>Install Mullvad&rsquo;s CLI/SDK if you plan to rotate VPN exits automatically.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="240">
+                    <h3>Know the CLI switches</h3>
+                    <p>Only supported flags are listed below.</p>
+                    <ul>
+                        <li><code>python app.py</code> &mdash; launch the Tkinter interface.</li>
+                        <li><code>python app.py --nogui</code> &mdash; force console mode even if Tkinter is available.</li>
+                        <li><code>python app.py -h</code> &mdash; print the current help text.</li>
+                    </ul>
+                </article>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading reveal">
+                <span class="eyebrow">GUI operations</span>
+                <h2>Configure scans visually.</h2>
+                <p>The Tkinter interface exposes every runtime knob without editing code.</p>
+            </div>
+            <div class="content-grid">
+                <article class="content-card reveal" data-delay="0">
+                    <h3>Core controls</h3>
+                    <ul>
+                        <li>Set start/end IPs or CIDR ranges in the address controls.</li>
+                        <li>Adjust the worker slider (default 150 threads) and TCP timeout (default 4 seconds).</li>
+                        <li>Provide additional ports for Bedrock or modded servers if needed.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="120">
+                    <h3>Proxy pool management</h3>
+                    <ul>
+                        <li>Edit <code>mcsmartscan/mullvadproxyips.txt</code> before launching to seed proxies.</li>
+                        <li>Use the GUI Proxy Pool panel to monitor health, lease counts, and cooldown timers.</li>
+                        <li>Toggle Mullvad cycling only if the Mullvad app/CLI is online and authenticated.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="240">
+                    <h3>Results & exports</h3>
+                    <ul>
+                        <li>Watch the live table and log pane for MOTDs, latency bars, and status cues.</li>
+                        <li>Change the output path if you prefer a shared folder or external drive.</li>
+                        <li>Export confirmed servers or open port leads directly from the UI at any time.</li>
+                    </ul>
+                </article>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading reveal">
+                <span class="eyebrow">Console automation</span>
+                <h2>Run headless scans in servers or pipelines.</h2>
+                <p>Console mode shares the same engine and persistence as the GUI, making it ideal for infrastructure without desktops.</p>
+            </div>
+            <div class="content-grid">
+                <article class="content-card reveal" data-delay="0">
+                    <h3>Start a headless session</h3>
+                    <pre><code class="language-bash">python app.py --nogui</code></pre>
+                    <ul>
+                        <li>The shim exposes state such as processed hosts, latency averages, and failure ratios.</li>
+                        <li>Define <code>run_console_scan(app)</code>, <code>console_scan_loop(app)</code>, or similar helpers in <code>app.py</code> to automate workflows.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="120">
+                    <h3>Schedule with cron or Task Scheduler</h3>
+                    <ul>
+                        <li>Activate the virtual environment before launching the script.</li>
+                        <li>Use environment variables or code edits to change ranges per run.</li>
+                        <li>Review <code>StorageManager</code> outputs after each scheduled sweep.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="240">
+                    <h3>Logging best practices</h3>
+                    <ul>
+                        <li>Redirect stdout/stderr to files for long sessions: <code>python app.py --nogui &gt; scan.log 2&gt;&amp;1</code>.</li>
+                        <li>Rotate logs regularly to prevent large files on disk.</li>
+                        <li>Keep the ethical guidelines in mind when running unattended scans.</li>
+                    </ul>
+                </article>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading reveal">
+                <span class="eyebrow">Packaging & distribution</span>
+                <h2>Create reproducible builds for teammates.</h2>
+                <p>Scripts and workflows in the repository remove the guesswork from shipping binaries.</p>
+            </div>
+            <div class="content-grid">
+                <article class="content-card reveal" data-delay="0">
+                    <h3>Local PyInstaller build</h3>
+                    <pre><code class="language-powershell">Set-ExecutionPolicy -Scope Process Bypass
+./pyinstaller.ps1</code></pre>
+                    <ul>
+                        <li>Produces <code>dist/MinecraftServerFinder.exe</code> using the maintained spec file.</li>
+                        <li>Includes proxy lists and the <code>mcsmartscan</code> package by default.</li>
+                        <li>Matches the behaviour of the GitHub Actions packaging workflow.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="120">
+                    <h3>GitHub Actions release</h3>
+                    <ul>
+                        <li>Trigger the <em>Build Windows Release</em> workflow manually or by tagging a commit with <code>v*</code>.</li>
+                        <li>CI runs on <code>windows-latest</code> and uploads the packaged executable as a release asset.</li>
+                        <li>Combine with the Python application workflow for automated tests on Windows, macOS, and Linux.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="240">
+                    <h3>Bootstrap Windows machines</h3>
+                    <pre><code class="language-batch">install_system.bat</code></pre>
+                    <ul>
+                        <li>Installs Python dependencies system-wide and upgrades <code>pip</code>.</li>
+                        <li>Ideal for lab or classroom deployments where virtualenvs are inconvenient.</li>
+                        <li>Add optional extras afterwards if you need deeper protocol insight.</li>
+                    </ul>
+                </article>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading reveal">
+                <span class="eyebrow">Verification & maintenance</span>
+                <h2>Keep changes stable as the toolkit evolves.</h2>
+                <p>Use the existing test suite and linters to validate modifications before distributing builds.</p>
+            </div>
+            <div class="content-grid">
+                <article class="content-card reveal" data-delay="0">
+                    <h3>Run tests locally</h3>
+                    <pre><code class="language-bash">pytest</code></pre>
+                    <ul>
+                        <li>Exercises utilities and storage helpers under <code>tests/</code>.</li>
+                        <li>Add new tests alongside code changes to keep coverage meaningful.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="120">
+                    <h3>Lint before committing</h3>
+                    <pre><code class="language-bash">flake8 .</code></pre>
+                    <ul>
+                        <li>Aligns with the Python application workflow executed in CI.</li>
+                        <li>Combine with your preferred formatters (<code>black</code>, <code>ruff</code>, <code>mypy</code>) if you want stricter local checks.</li>
+                    </ul>
+                </article>
+                <article class="content-card reveal" data-delay="240">
+                    <h3>Document behaviour updates</h3>
+                    <ul>
+                        <li>Update <code>README.md</code>, this usage page, and the feature overview when functionality changes.</li>
+                        <li>Note new CLI switches or GUI controls explicitly so operators are never surprised.</li>
+                        <li>Coordinate with the ethics guidance whenever throughput or automation features shift.</li>
+                    </ul>
+                </article>
+            </div>
+            <p class="section-note">These steps mirror the official repository docs. If you extend the tool, make sure external dependencies remain optional and clearly documented.</p>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="footer-content">
+            <div>
+                <strong>Minecraft Server Finder</strong>
+                <p>MIT licensed. Built for defenders, explorers, and curious administrators.</p>
+            </div>
+            <div class="footer-links">
+                <a href="index.html">Home</a>
+                <a href="features.html">Features</a>
+                <a href="architecture.html">How It Works</a>
+                <a href="usage.html">Usage</a>
+                <a href="ethics.html">Ethics</a>
+                <a href="https://github.com/braydos-h/Minecraft-Server-Finder" target="_blank" rel="noopener">GitHub</a>
+                <a href="https://github.com/braydos-h/Minecraft-Server-Finder/blob/main/README.md" target="_blank" rel="noopener">Documentation</a>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
