@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import platform
 from typing import Iterable, Tuple
 
@@ -69,4 +70,16 @@ def ping_to_bars(ms: float | None) -> int:
 
 # Note: Removed autotune constants, retries/backoff/cooldown/jitter/TCP fallback/global backoff.
 BEDROCK_MAGIC = b"\x00\xff\xff\x00\xfe\xfe\xfe\xfe\xfd\xfd\xfd\xfd\x12\x34\x56\x78"  # RakNet magic
+
+# Proxy / networking tuning
+PROXY_LOG_CAPACITY = int(os.getenv("PROXY_LOG_CAPACITY", "1000"))
+PROXY_LOG_DEBOUNCE_MS = int(os.getenv("PROXY_LOG_DEBOUNCE_MS", "160"))
+PROXY_UI_REFRESH_MS = int(os.getenv("PROXY_UI_REFRESH_MS", "100"))
+PROXY_HEALTH_TTL_SECONDS = float(os.getenv("PROXY_HEALTH_TTL_SECONDS", "600.0"))
+PROXY_HEALTH_TIMEOUT = float(os.getenv("SOCKS_HEALTH_TIMEOUT", "6.0"))
+PROXY_HEALTH_THREADS = max(1, int(os.getenv("SOCKS_HEALTH_THREADS", "16")))
+PROXY_IO_THREADS = max(1, int(os.getenv("PROXY_IO_THREADS", "4")))
+PROXY_LOG_FILE_DIR = os.getenv("PROXY_LOG_FILE_DIR")
+PROXY_EVENT_FILE_MAX_BYTES = int(os.getenv("PROXY_EVENT_FILE_MAX_BYTES", "1048576"))
+PROXY_EVENT_FILE_BACKUPS = int(os.getenv("PROXY_EVENT_FILE_BACKUPS", "3"))
 

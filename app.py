@@ -1,9 +1,10 @@
 # ============================== SECTION 1: IMPORTS / CONSTANTS / GLOBALS (START) ==============================
-import os, sys, time, json, math, socket, threading, queue, subprocess, platform, re, hashlib, random, shutil
+import os, sys, time, json, math, socket, threading, queue, subprocess, platform, re, hashlib, random, shutil, logging
 from datetime import datetime
 from ipaddress import IPv4Address
 from concurrent.futures import ThreadPoolExecutor
 from collections import deque
+from typing import List
 from pathlib import Path
 
 from mcsmartscan.constants import (
@@ -21,6 +22,10 @@ from mcsmartscan.constants import (
     PROTOCOL_CANDIDATES,
     PROTOCOL_TO_VERSION_HINT,
     SAVED_SERVERS_FILE,
+    PROXY_IO_THREADS,
+    PROXY_LOG_CAPACITY,
+    PROXY_LOG_DEBOUNCE_MS,
+    PROXY_UI_REFRESH_MS,
     ping_to_bars,
 )
 from mcsmartscan.storage import StorageManager
@@ -35,6 +40,8 @@ from mcsmartscan.proxy import (
     ProxyHandshakeError,
     ProxyPool,
     ProxyTargetError,
+    emit_event,
+    get_event_buffer,
 )
 
 try:
@@ -57,6 +64,9 @@ try:
     _nmap_available = True
 except Exception:
     _nmap_available = False
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 _gui_available = True
 try:
@@ -535,6 +545,17 @@ class ScannerAppGUI:
         self.proxy_pool = None
         self._proxy_enabled = False
         self._proxy_snapshot = []
+        self._proxy_table_render_guard = 0.0
+        self._proxy_table_deferred = False
+        self._proxy_table_after = None
+        self._proxy_ui_interval = max(0.05, PROXY_UI_REFRESH_MS / 1000.0)
+        self._proxy_log_filter_var = tk.StringVar(value="All")
+        self._proxy_log_search_var = tk.StringVar(value="")
+        self._proxy_log_dirty = False
+        self._proxy_log_after = None
+        self._proxy_log_last_render = 0.0
+        self._proxy_log_buffer = get_event_buffer()
+        self._proxy_log_text = None
         self._init_proxy_pool()
 
         # --- Mullvad management ---
@@ -563,6 +584,7 @@ class ScannerAppGUI:
         self._save_pending = False
         self._last_save = 0.0
         self._maybe_lock = threading.Lock()
+        self._io_executor = ThreadPoolExecutor(max_workers=PROXY_IO_THREADS, thread_name_prefix="proxy-io")
 
         # --- Stats and counters ---
         self.total_ips = 0
@@ -663,6 +685,7 @@ class ScannerAppGUI:
         self._prepare_outfile()
         self._init_theme()
         self._build_ui()
+        self._mark_proxy_log_dirty()
         self._load_saved_servers()
         self._start_refresh_loop()
         self._schedule_analytics()
@@ -851,7 +874,7 @@ class ScannerAppGUI:
         proxy_frame.columnconfigure(0, weight=1)
         proxy_frame.columnconfigure(1, weight=0)
         proxy_frame.rowconfigure(1, weight=1)
-        proxy_frame.rowconfigure(3, weight=1)
+        proxy_frame.rowconfigure(2, weight=1)
         proxy_header = ttk.Frame(proxy_frame)
         proxy_header.grid(row=0, column=0, columnspan=2, sticky="ew", padx=8, pady=(6, 2))
         proxy_header.columnconfigure(0, weight=1)
@@ -887,16 +910,53 @@ class ScannerAppGUI:
         self.proxy_tree.configure(yscrollcommand=proxy_scroll.set)
         self.proxy_tree.grid(row=1, column=0, sticky="nsew", padx=(8, 0), pady=(0, 4))
         proxy_scroll.grid(row=1, column=1, sticky="ns", padx=(0, 8), pady=(0, 4))
-        ttk.Label(proxy_frame, text="Proxy Log").grid(row=2, column=0, sticky="w", padx=8, pady=(6, 2))
-        self.proxy_log = scrolledtext.ScrolledText(
-            proxy_frame,
-            height=8,
+        log_container = ttk.Frame(proxy_frame)
+        log_container.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=8, pady=(6, 6))
+        log_container.columnconfigure(0, weight=1)
+        log_container.rowconfigure(1, weight=1)
+
+        log_controls = ttk.Frame(log_container)
+        log_controls.grid(row=0, column=0, sticky="ew", pady=(0, 4))
+        log_controls.columnconfigure(2, weight=1)
+        ttk.Label(log_controls, text="Proxy Log").grid(row=0, column=0, sticky="w")
+        self.cbo_proxy_log_filter = ttk.Combobox(
+            log_controls,
+            state="readonly",
+            values=("All", "OK", "Errors"),
+            textvariable=self._proxy_log_filter_var,
+            width=8,
+        )
+        self.cbo_proxy_log_filter.grid(row=0, column=1, sticky="w", padx=(8, 4))
+        try:
+            self.cbo_proxy_log_filter.current(0)
+        except Exception:
+            self._proxy_log_filter_var.set("All")
+        self.cbo_proxy_log_filter.bind("<<ComboboxSelected>>", self._on_proxy_log_filter_changed)
+        self.ent_proxy_log_search = ttk.Entry(
+            log_controls,
+            textvariable=self._proxy_log_search_var,
+            width=24,
+        )
+        self.ent_proxy_log_search.grid(row=0, column=2, sticky="ew", padx=(4, 4))
+        self.ent_proxy_log_search.bind("<KeyRelease>", self._on_proxy_log_search_changed)
+        self.btn_proxy_log_copy = ttk.Button(log_controls, text="Copy visible logs", command=self._copy_proxy_logs)
+        self.btn_proxy_log_copy.grid(row=0, column=3, sticky="e", padx=(8, 4))
+        self.btn_proxy_log_save = ttk.Button(log_controls, text="Save logs…", command=self._save_proxy_logs)
+        self.btn_proxy_log_save.grid(row=0, column=4, sticky="e")
+
+        self.proxy_log_text = scrolledtext.ScrolledText(
+            log_container,
+            height=9,
             state="disabled",
             font=("Consolas", 9),
             relief="flat",
             borderwidth=0,
+            wrap="none",
         )
-        self.proxy_log.grid(row=3, column=0, columnspan=2, sticky="nsew", padx=8, pady=(0, 6))
+        self.proxy_log_text.grid(row=1, column=0, sticky="nsew")
+        proxy_log_scroll = ttk.Scrollbar(log_container, orient="vertical", command=self.proxy_log_text.yview)
+        self.proxy_log_text.configure(yscrollcommand=proxy_log_scroll.set)
+        proxy_log_scroll.grid(row=1, column=1, sticky="ns")
 
         vpn_section, vpn_frame = self._create_collapsible_section(network_body, "VPN Control")
         vpn_section.pack(fill="x", padx=4, pady=(0, 6))
@@ -1050,6 +1110,10 @@ class ScannerAppGUI:
         if pool:
             self.proxy_pool = pool
             self._proxy_enabled = True
+            try:
+                self.proxy_pool.prepare_for_run()
+            except Exception:
+                logger.exception("Failed to prepare proxy pool for run.")
             self._uiq_put(("log", f"[PROXY] Loaded {pool.total} Mullvad proxy endpoints.", "info"))
         else:
             self.proxy_pool = None
@@ -1077,10 +1141,8 @@ class ScannerAppGUI:
         if self._proxy_enabled:
             self.proxy_pool.prepare_for_run()
             self._proxy_log("[PROXY] Proxy usage enabled.", "info")
-            self.var_proxy_health_hint.set("Proxy usage enabled")
         else:
             self._proxy_log("[PROXY] Proxy usage disabled.", "info")
-            self.var_proxy_health_hint.set("Proxy usage disabled")
         self._update_proxy_toggle_button()
         self._refresh_proxy_health_ui()
 
@@ -1317,22 +1379,15 @@ class ScannerAppGUI:
                     self.quick_log.tag_config(tag, foreground=colour)
             except Exception:
                 pass
-        if hasattr(self, "proxy_log"):
+        if hasattr(self, "proxy_log_text") and self.proxy_log_text:
             try:
-                self.proxy_log.configure(
+                self.proxy_log_text.configure(
                     bg=palette["bg_alt"],
                     fg=palette["fg"],
                     insertbackground=palette["fg"],
                     highlightthickness=0,
                     borderwidth=0,
                 )
-                for tag, colour in [
-                    ("info", palette["muted"]),
-                    ("warn", palette["warn"]),
-                    ("error", palette["danger"]),
-                    ("success", palette["success"]),
-                ]:
-                    self.proxy_log.tag_config(tag, foreground=colour)
             except Exception:
                 pass
         if hasattr(self, "ctl"):
@@ -1468,6 +1523,11 @@ class ScannerAppGUI:
             self._ctl_async(msg)
         if connected_bool is not None:
             self._vpn_connected = connected_bool
+            if self.proxy_pool:
+                try:
+                    self.proxy_pool.set_mullvad_connected(connected_bool)
+                except Exception:
+                    logger.exception("Failed to propagate Mullvad status to proxy pool.")
 
         self._run_on_ui(self._update_mullvad_label)
 
@@ -2425,59 +2485,41 @@ class ScannerAppGUI:
     def _proxy_log(self, msg: str, tag: str = "info"):
         if not msg:
             return
-        try:
-            if hasattr(self, "proxy_log"):
-                self.proxy_log.configure(state="normal")
-                self.proxy_log.insert("end", str(msg) + "\n", tag)
-                self.proxy_log.configure(state="disabled")
-                self.proxy_log.see("end")
-            else:
-                print(msg)
-        except Exception:
-            print(msg)
+        level_map = {
+            "info": "INFO",
+            "warn": "WARN",
+            "warning": "WARN",
+            "error": "ERROR",
+            "success": "SUCCESS",
+            "green": "SUCCESS",
+        }
+        level = level_map.get(tag.lower(), "INFO")
+        emit_event(level, "app-proxy-log", str(msg), tag=tag)
+        self._mark_proxy_log_dirty()
 
     def _handle_proxy_event_ui(self, event: dict) -> None:
         if not isinstance(event, dict):
             return
-        kind = event.get("type") or "info"
-        label = event.get("proxy") or "?"
-        if kind == "proxy-failure":
-            stage = event.get("stage")
-            error = event.get("error") or "proxy failure"
-            detail = f"[PROXY] {label} failure: {error}"
-            if stage:
-                detail += f" ({stage})"
-            self._proxy_log(detail, "error")
-        elif kind == "target-failure":
-            error = event.get("error") or "target failure"
-            self._proxy_log(f"[PROXY] {label} target error: {error}", "warn")
-        elif kind == "success":
-            latency = event.get("latency_ms")
-            if latency is not None:
-                self.var_proxy_health_hint.set(f"{label} success {latency:.1f} ms")
-        elif kind == "proxy-quarantine":
-            duration = float(event.get("duration") or 0.0)
-            consecutive = event.get("consecutive")
-            extra = f" after {consecutive} failures" if consecutive is not None else ""
-            self._proxy_log(f"[PROXY] {label} quarantined for {duration:.1f}s{extra}", "warn")
-            self.var_proxy_health_hint.set(f"{label} quarantine {duration:.0f}s")
-        elif kind == "proxy-disabled":
-            duration = float(event.get("duration") or 0.0)
-            reason = event.get("reason") or "cool-off"
-            self._proxy_log(f"[PROXY] {label} disabled for {duration:.0f}s ({reason})", "error")
-            self.var_proxy_health_hint.set(f"{label} disabled {duration:.0f}s")
-        elif kind == "proxy-restored":
-            self._proxy_log(f"[PROXY] {label} restored to pool", "success")
-            self.var_proxy_health_hint.set(f"{label} restored")
-        elif kind == "release":
-            cooldown = float(event.get("cooldown") or 0.0)
-            self.var_proxy_health_hint.set(f"{label} released ({cooldown:.1f}s cooldown)")
-        elif kind == "acquire":
-            self.var_proxy_health_hint.set(f"{label} in use")
+        self._mark_proxy_log_dirty()
+        try:
+            self._refresh_proxy_health_ui()
+        except Exception:
+            logger.exception("Failed to refresh proxy UI after event.")
 
     def _refresh_proxy_health_ui(self):
         if not hasattr(self, "proxy_tree"):
             return
+        now = time.perf_counter()
+        elapsed = now - getattr(self, "_proxy_table_render_guard", 0.0)
+        if elapsed < self._proxy_ui_interval:
+            if not self._proxy_table_deferred:
+                delay = int(max(10, (self._proxy_ui_interval - elapsed) * 1000))
+                self._proxy_table_deferred = True
+                self._proxy_table_after = self.root.after(delay, self._refresh_proxy_health_ui)
+            return
+        self._proxy_table_render_guard = now
+        self._proxy_table_deferred = False
+        self._proxy_table_after = None
         if not self.proxy_pool:
             self.proxy_tree.delete(*self.proxy_tree.get_children())
             self.var_proxy_summary.set("Proxies disabled")
@@ -2487,36 +2529,31 @@ class ScannerAppGUI:
         snapshot = self.proxy_pool.health_snapshot()
         self._proxy_snapshot = snapshot
         total = len(snapshot)
-        in_use = sum(1 for item in snapshot if item.get("in_use"))
-        disabled_count = sum(1 for item in snapshot if (item.get("disabled") or 0) > 0.05)
-        quarantine_count = sum(
+        healthy = sum(1 for item in snapshot if item.get("health_ok"))
+        available = sum(
             1
             for item in snapshot
-            if (item.get("quarantine") or 0) > 0.05 and (item.get("disabled") or 0) <= 0.05
+            if item.get("health_ok") and not item.get("in_use")
         )
-        cooling = sum(
-            1
+        latencies = [
+            float(item.get("health_latency_ms"))
             for item in snapshot
-            if (
-                not item.get("in_use")
-                and (item.get("cooldown") or 0) > 0.05
-                and (item.get("quarantine") or 0) <= 0.05
-                and (item.get("disabled") or 0) <= 0.05
-            )
-        )
-        idle = max(0, total - in_use - cooling - quarantine_count - disabled_count)
-        summary_parts = [f"Proxies {total}", f"in use {in_use}"]
-        if disabled_count:
-            summary_parts.append(f"disabled {disabled_count}")
-        if quarantine_count:
-            summary_parts.append(f"quarantine {quarantine_count}")
-        if cooling:
-            summary_parts.append(f"cooling {cooling}")
-        summary_parts.append(f"idle {idle}")
-        summary = " | ".join(summary_parts)
+            if item.get("health_latency_ms") is not None
+        ]
+        avg_latency = (sum(latencies) / len(latencies)) if latencies else None
+        mullvad_connected = bool(getattr(self.proxy_pool, "mullvad_connected", True))
+        summary = f"Proxies loaded: {total} ({available} available)"
         if not self._proxy_enabled:
             summary += " (disabled)"
+        if avg_latency is not None:
+            footer = f"Healthy {healthy}/{total} | Avg latency {avg_latency:.1f} ms | "
+        else:
+            footer = f"Healthy {healthy}/{total} | Avg latency - ms | "
+        footer += f"Mullvad: {'Connected' if mullvad_connected else 'Disconnected'}"
+        if not mullvad_connected:
+            footer += " | Internal SOCKS likely unreachable"
         self.var_proxy_summary.set(summary)
+        self.var_proxy_health_hint.set(footer)
         existing = set(self.proxy_tree.get_children())
         for item_id in existing:
             self.proxy_tree.delete(item_id)
@@ -2562,6 +2599,147 @@ class ScannerAppGUI:
                 ),
             )
         self._update_proxy_toggle_button()
+
+    # ------------------------------------------------------------------ #
+    # Proxy log helpers
+    # ------------------------------------------------------------------ #
+    def _mark_proxy_log_dirty(self) -> None:
+        if not getattr(self, "proxy_log_text", None):
+            return
+        if self._proxy_log_dirty:
+            return
+        self._proxy_log_dirty = True
+        delay = max(50, PROXY_LOG_DEBOUNCE_MS)
+        if self._proxy_log_after is None:
+            self._proxy_log_after = self.root.after(delay, self._render_proxy_log)
+
+    def _render_proxy_log(self) -> None:
+        self._proxy_log_after = None
+        self._proxy_log_dirty = False
+        text_widget = getattr(self, "proxy_log_text", None)
+        if not text_widget:
+            return
+        filter_value = self._proxy_log_filter_var.get()
+        search_value = self._proxy_log_search_var.get().strip()
+        level_filter = None if filter_value == "All" else filter_value
+        events = self._proxy_log_buffer.snapshot(
+            level_filter=level_filter,
+            search=search_value or None,
+            limit=PROXY_LOG_CAPACITY,
+        )
+        lines: List[str] = []
+        for event in events:
+            timestamp = datetime.fromtimestamp(event.timestamp).strftime("%H:%M:%S")
+            extras: List[str] = []
+            proxy_label = event.extra.get("proxy")
+            if proxy_label:
+                extras.append(str(proxy_label))
+            if event.extra.get("country"):
+                extras.append(str(event.extra["country"]))
+            if event.extra.get("latency_ms") is not None:
+                try:
+                    extras.append(f"{float(event.extra['latency_ms']):.1f}ms")
+                except Exception:
+                    extras.append(f"{event.extra['latency_ms']}ms")
+            if event.extra.get("error"):
+                extras.append(str(event.extra["error"]))
+            extra_text = " | ".join(extras)
+            line = f"[{timestamp}] {event.level:<7} {event.type}: {event.message}"
+            if extra_text:
+                line += f" | {extra_text}"
+            lines.append(line)
+        output = "\n".join(lines)
+        text_widget.configure(state="normal")
+        text_widget.delete("1.0", "end")
+        if output:
+            text_widget.insert("end", output)
+        text_widget.configure(state="disabled")
+        text_widget.see("end")
+        self._proxy_log_last_render = time.time()
+
+    def _on_proxy_log_filter_changed(self, *_args) -> None:
+        self._mark_proxy_log_dirty()
+
+    def _on_proxy_log_search_changed(self, *_args) -> None:
+        self._mark_proxy_log_dirty()
+
+    def _copy_proxy_logs(self) -> None:
+        text_widget = getattr(self, "proxy_log_text", None)
+        if not text_widget:
+            return
+        try:
+            payload = text_widget.get("1.0", "end-1c")
+            if not payload:
+                return
+            self.root.clipboard_clear()
+            self.root.clipboard_append(payload)
+            emit_event("INFO", "log-copy", "Proxy log copied to clipboard", length=len(payload))
+        except Exception as exc:
+            emit_event("ERROR", "log-copy-failed", f"Copy logs failed: {exc}")
+
+    def _save_proxy_logs(self) -> None:
+        text_widget = getattr(self, "proxy_log_text", None)
+        if not text_widget:
+            return
+        payload = text_widget.get("1.0", "end-1c")
+        if not payload.strip():
+            return
+
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        output_dir = Path(self.storage.output_path).resolve().parent / "proxy_logs"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        destination = output_dir / f"proxy-log-{timestamp}.log"
+
+        def _write() -> None:
+            try:
+                destination.write_text(payload, encoding="utf-8")
+                emit_event(
+                    "SUCCESS",
+                    "log-saved",
+                    f"Proxy log saved: {destination}",
+                    path=str(destination),
+                )
+            except Exception as exc:
+                emit_event(
+                    "ERROR",
+                    "log-save-failed",
+                    f"Failed to save proxy log: {exc}",
+                    path=str(destination),
+                )
+
+        self._io_executor.submit(_write)
+
+    def on_close(self) -> None:
+        try:
+            if self.scanning:
+                self.stop_scan()
+        except Exception:
+            logger.exception("Failed to stop scan during shutdown.")
+        try:
+            if self.proxy_pool:
+                self.proxy_pool.shutdown(wait=False)
+        except Exception:
+            logger.exception("Failed to shutdown proxy pool.")
+        try:
+            self._io_executor.shutdown(wait=False)
+        except Exception:
+            logger.exception("Failed to shutdown proxy IO executor.")
+        if self._proxy_log_after is not None:
+            try:
+                self.root.after_cancel(self._proxy_log_after)
+            except Exception:
+                pass
+            self._proxy_log_after = None
+        if getattr(self, "_proxy_table_after", None):
+            try:
+                self.root.after_cancel(self._proxy_table_after)
+            except Exception:
+                pass
+            self._proxy_table_after = None
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
 # ============================== SECTION 8: GUI HELPERS / STATS / TICK (END) ==============================
 
 # ============================== SECTION 9: FILES / LOGGING / TABLE HELPERS (START) ==============================
@@ -3273,6 +3451,7 @@ def main():
         try:
             root = tk.Tk()
             app = ScannerAppGUI(root)
+            root.protocol("WM_DELETE_WINDOW", app.on_close)
 
             # Ensure loops run
             try: root.after(0, app._pump_ui)
