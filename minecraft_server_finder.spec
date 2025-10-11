@@ -2,9 +2,22 @@
 
 from pathlib import Path
 
+
+def _resolve_project_root() -> Path:
+    """Return the directory containing this spec file."""
+
+    # When PyInstaller executes the spec file, the ``__file__`` global is not
+    # guaranteed to be populated (for example when run via ``pyinstaller
+    # path/to/spec`` on some platforms).  Fall back to the current working
+    # directory so the build keeps functioning.
+    spec_path = globals().get("__file__")
+    if spec_path:
+        return Path(spec_path).resolve().parent
+    return Path.cwd()
+
 block_cipher = None
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = _resolve_project_root()
 
 
 datas = [
