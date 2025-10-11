@@ -34,16 +34,27 @@ jobs:
         run: |
           pyinstaller --clean --noconfirm minecraft_server_finder.spec
 
+      - name: Determine release version
+        shell: pwsh
+        run: |
+          $ref = '${{ github.ref }}'
+          $refName = '${{ github.ref_name }}'
+
+          if ($ref -like 'refs/tags/*' -and -not [string]::IsNullOrWhiteSpace($refName)) {
+            $version = $refName
+          }
+          else {
+            $version = 'v' + '${{ github.run_number }}'
+          }
+
+          $safeLabel = $version -replace '[^0-9A-Za-z._-]', '_'
+
+          "RELEASE_VERSION=$version" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+          "BUILD_LABEL=$safeLabel"   | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Prepare release artifact
         shell: pwsh
         run: |
-          $label = '${{ github.ref_name }}'
-          if ([string]::IsNullOrWhiteSpace($label)) {
-            $label = 'manual-' + '${{ github.run_id }}'
-          }
-          $safeLabel = $label -replace '[^0-9A-Za-z._-]', '_'
-          "BUILD_LABEL=$safeLabel" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-
           $distDir = Join-Path (Get-Location) 'dist'
           $sourceExe = Join-Path $distDir 'MinecraftServerFinder.exe'
           if (-not (Test-Path $sourceExe)) {
@@ -53,7 +64,7 @@ jobs:
           $releaseDir = Join-Path (Get-Location) 'release'
           New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
 
-          $targetExe = Join-Path $releaseDir ("MinecraftServerFinder-$safeLabel.exe")
+          $targetExe = Join-Path $releaseDir ("MinecraftServerFinder-${{ env.BUILD_LABEL }}.exe")
           Copy-Item $sourceExe -Destination $targetExe -Force
 
       - name: Upload build artifact
@@ -64,10 +75,16 @@ jobs:
           if-no-files-found: error
 
       - name: Publish GitHub release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_VERSION }}
+          name: MinecraftServerFinder ${{ env.RELEASE_VERSION }}
           files: release/MinecraftServerFinder-${{ env.BUILD_LABEL }}.exe
           generate_release_notes: true
+          draft: false
+          prerelease: false
+          make_latest: true
+          fail_on_unmatched_files: true
+          allow_updates: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
